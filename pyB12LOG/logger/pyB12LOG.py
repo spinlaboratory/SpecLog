@@ -7,7 +7,7 @@ from config.config import CONFIG
 
 class pyB12LOG:
     def __init__(self):
-        self.timeDelay, self.logDir = self.getConfig() 
+        self.timeDelay, self.logDir, self.fileSize = self.getConfig() 
         self.debugLogger = self.initDebugLog(self.logDir)
 
         self.deviceReg = self.logDir + '/device_reg.csv'
@@ -30,7 +30,7 @@ class pyB12LOG:
         addressList = []
         if init == 1:
             for address in self.deviceAddresses:
-                device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger)
+                device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger, self.fileSize)
                 self.historicalAddresses.append(address)
                 self.historicalDevices.append(device)
 
@@ -58,7 +58,7 @@ class pyB12LOG:
                     device.reconnect(self.rm)
                     
                 else:
-                    device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger)
+                    device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger, self.fileSize)
                     self.historicalAddresses.append(address)
                     self.historicalDevices.append(device)
                     
@@ -114,13 +114,14 @@ class pyB12LOG:
         configKey = 'CONFIG'
         logDirHome = CONFIG[configKey]['log_folder_loc'][1:-1]
         timeDelay = float(CONFIG[configKey]['acquire_interval'])
+        fileSize = int(CONFIG[configKey]['save_file_size_kb']) * 1028
 
         listDir = os.listdir(logDirHome)
         logDir= logDirHome +'/B12TLOG/'
         if 'B12TLOG' not in listDir:
             os.mkdir(logDir)
         
-        return timeDelay, logDir
+        return timeDelay, logDir, fileSize
 
     def initDebugLog(self, logDir):
         logpath = logDir + '/debug_log.txt'

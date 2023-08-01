@@ -5,6 +5,7 @@ while(1):
     try:
         log.log()
     except Exception as err:
+        print(err)
         log = pyB12LOG()
 
 

@@ -1,10 +1,11 @@
+import os
 import datetime
 from config.config import COMMAND
 
 commonBaudRate = [9600, 19200, 38400, 57600, 115200]
 
 class DEVICE:
-    def __init__(self, deviceAddress, rm, deviceHistory, logDir, debugLogger):
+    def __init__(self, deviceAddress, rm, deviceHistory, logDir, debugLogger, fileSize):
         self.deviceHistoryStatus = False
         self.logDir = logDir
         self.deviceReg = self.logDir + '/device_reg.csv'
@@ -16,6 +17,7 @@ class DEVICE:
         self.serialNumber = None
         self.deviceStatus = False
         self.baudRate = None
+        self.fileSize = fileSize
 
         if deviceAddress in deviceHistory:
             deviceInfo = deviceHistory[deviceAddress][:-1]
@@ -105,22 +107,17 @@ class DEVICE:
     def log(self , init = 0):
         if self.deviceID != None and self.logDictStatus and self.deviceStatus:
             today = datetime.date.today()
-            if init:
-                try:
-                    f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'r') # try to open a file if exist
-                    header = f.readline() # try to read header, no header will goes to except routine)
-                    if header.strip() != self.deviceID.strip():
-                        raise ValueError
-                    f.close()
-                except:
-                    f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'a')
-                    print(self.deviceID, file = f)
-                    print('Date, Time, ' + ', '.join(self.queryLogDict.keys()), file = f)
-                    f.close()
-
+            if init or self.createFile:
+                now = datetime.datetime.now().strftime('%Y%m%d%H%M%S') #YYYYMMDDHMS
+                self.fileName = self.logDir + '/' + str(self.deviceManufacturer) + '_' + str(self.modelNumber) + '_' + now + '.csv'
+                f = open(self.fileName, 'a')
+                print('Date, Time, ' + ', '.join(self.queryLogDict.keys()), file = f)
+                f.close()
+                self.createFile = False
+            
             else:
                 string = str(today) + ', ' + str(datetime.datetime.now().strftime("%H:%M:%S"))+ ', '
-                f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'a')
+                f = open(self.fileName, 'a')
                 try:
                     for command in self.queryLogDict.values():
                         string += (self.device.query(command).strip('\n').strip('\r') + ', ')
@@ -130,3 +127,32 @@ class DEVICE:
                     self.debugLogger.warn(err)
                 
                 f.close()
+
+                if os.path.getsize(self.fileName) > self.fileSize:
+                    self.createFile = True
+
+            # if init:
+            #     try:
+            #         f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'r') # try to open a file if exist
+            #         header = f.readline() # try to read header, no header will goes to except routine)
+            #         if header.strip() != self.deviceID.strip():
+            #             raise ValueError
+            #         f.close()
+            #     except:
+            #         f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'a')
+            #         print(self.deviceID, file = f)
+            #         print('Date, Time, ' + ', '.join(self.queryLogDict.keys()), file = f)
+            #         f.close()
+
+            # else:
+            #     string = str(today) + ', ' + str(datetime.datetime.now().strftime("%H:%M:%S"))+ ', '
+            #     f = open(self.logDir + '/' + str(today.year) + '_' + str(self.deviceManufacturer) + '_' + str(str(self.modelNumber)) + '.csv', 'a')
+            #     try:
+            #         for command in self.queryLogDict.values():
+            #             string += (self.device.query(command).strip('\n').strip('\r') + ', ')
+            #         string = string[:-2] # remove last commas
+            #         print(string, file = f)
+            #     except Exception as err:
+            #         self.debugLogger.warn(err)
+                
+            #     f.close()
