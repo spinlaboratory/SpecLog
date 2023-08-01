@@ -4,6 +4,8 @@ global config
 import configparser
 from pathlib import Path
 import warnings
+import os
+import shutil
 
 import logging
 
@@ -55,22 +57,35 @@ def _get_log_config(configname):
             "args_kwargs": _kwarg_converter,
         }
     )
-
     # define three possible locations:
-    log_current_config = Path.cwd() / configname
-    log_home_config = Path.home() / configname
+    # log_current_config = Path.cwd() / configname
+    # log_home_config = Path.home() / configname
+    # config_read_list = [log_global_config, log_home_config, log_current_config]
 
+    # # user defined takes precedence
+    # config.read(config_read_list)
+    
     log_cfg_folder = str(
         Path(__file__).parent
     )  # / configname #.with_name("config"))
+
     log_global_config = Path(log_cfg_folder) / configname
 
-    config_read_list = [log_global_config, log_home_config, log_current_config]
-
-    # user defined takes precedence
-    config.read(config_read_list)
+    # check if command location
+    log_public = 'C:/Users/Public/'
+    list_dir = os.listdir(log_public)
+    log_dir = log_public + 'B12TLOG_Config'
+    if 'B12TLOG_Config' not in list_dir:
+        os.mkdir(log_dir) 
+    
+    log_public_config = log_dir + '/' + configname
+    
+    if configname not in os.listdir(log_dir):
+        shutil.copy(log_global_config, log_dir + '/' + configname)
+    
+    config.read(log_public_config)
+    
     return config
-
 
 COMMAND = _get_log_config("command.cfg")
 CONFIG = _get_log_config("config.cfg")

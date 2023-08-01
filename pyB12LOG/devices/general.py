@@ -1,9 +1,4 @@
-import pyvisa
-import os
 import datetime
-import time
-import logging
-import pathlib
 from config.config import COMMAND
 
 commonBaudRate = [9600, 19200, 38400, 57600, 115200]
