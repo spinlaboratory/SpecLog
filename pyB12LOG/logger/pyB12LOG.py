@@ -10,9 +10,9 @@ class pyB12LOG:
         self.timeDelay, self.logDir, self.fileSize = self.getConfig() 
         self.debugLogger = self.initDebugLog(self.logDir)
 
-        self.deviceReg = self.logDir + '/device_reg.csv'
-        self.deviceHistory = {}
-        self.initDeviceHistory()
+        self.deviceRegFile = self.logDir + '/device_reg.txt' # file to device registration 
+        self.deviceRegDict = {} # dictionary to store information from device registration 
+        self.initDeviceRegDict() # put information from device registration to dictionary
 
         self.validAddresses = []
         self.validDevices = []
@@ -30,7 +30,7 @@ class pyB12LOG:
         addressList = []
         if init == 1:
             for address in self.deviceAddresses:
-                device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger, self.fileSize)
+                device = general.DEVICE(address, self.rm, self.deviceRegDict, self.logDir, self.debugLogger, self.fileSize)
                 self.historicalAddresses.append(address)
                 self.historicalDevices.append(device)
 
@@ -58,7 +58,7 @@ class pyB12LOG:
                     device.reconnect(self.rm)
                     
                 else:
-                    device = general.DEVICE(address, self.rm, self.deviceHistory, self.logDir, self.debugLogger, self.fileSize)
+                    device = general.DEVICE(address, self.rm, self.deviceRegDict, self.logDir, self.debugLogger, self.fileSize)
                     self.historicalAddresses.append(address)
                     self.historicalDevices.append(device)
                     
@@ -86,20 +86,22 @@ class pyB12LOG:
                     self.deviceAddresses = self.rm.list_resources()
 
 
-    def initDeviceHistory(self):
-        ## get device history
-        try:
-            f = open(self.deviceReg, 'r')
-        except:
-            self.debugLogger.info('Create New Device History')
-            f = open(self.deviceReg, 'w')
-            print('Address,Status,Manufacturer,Model,SN,BaudRate', file = f)
-        f = open(self.deviceReg, 'r')
+    def initDeviceRegDict(self):
+        ## get device registration
+        ## dictionary format: {Address: [Address, Status, Manufacturer, Model, SN, BaudRate...]}
+        try: # check device registration exists
+            f = open(self.deviceRegFile, 'r') 
+        except: # not exists, create new file
+            self.debugLogger.info('Create New Device History') 
+            f = open(self.deviceRegFile, 'w')
+            print('Address,Status,Manufacturer,Model,SN,BaudRate,idCommand,terminal,splitSign,dataIndex', file = f) # maybe this should be put into config file?
+        f = open(self.deviceRegFile, 'r')
         
-        line = f.readline().strip('\n')
-        while line != '':
-            line = line.strip().split(',')
-            self.deviceHistory[line[0]] = line
+        line = f.readline() # avoid putting header into dictionary
+        line = f.readline().strip('\n') # get dictionary keys
+        while line != '': # run until the end of file
+            line = line.strip().split(',') 
+            self.deviceRegDict[line[0]] = line 
             line = f.readline().strip('\n')
         f.close()
 
@@ -112,8 +114,8 @@ class pyB12LOG:
     
     def getConfig(self):
         configKey = 'CONFIG'
-        logDirHome = CONFIG[configKey]['log_folder_loc'][1:-1]
-        timeDelay = float(CONFIG[configKey]['acquire_interval'])
+        logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
+        timeDelay = float(CONFIG[configKey]['log_interval'])
         fileSize = int(CONFIG[configKey]['save_file_size_kb']) * 1028
 
         listDir = os.listdir(logDirHome)
