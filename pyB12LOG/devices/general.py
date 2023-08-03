@@ -50,20 +50,6 @@ class DEVICE:
             self.device = rm.open_resource(self.device_address) # open rm for valid device or unknown device
             self.setSerial()
 
-        if not self.baud_rate: # this check the baud rate for unknown device. If the device is valid, the baud rate is saved in device registration
-            print(self.device_address, 'Found! Trying baud rate...')
-            for baud_rate in common_baud_rate:
-                self.baud_rate = baud_rate
-                self.device.baud_rate = self.baud_rate
-                try:
-                    print(self.device.query(self.id_command).strip('\n').strip('\r'))
-                    break
-                except:
-                    self.debugLogger.warn('%s baud rate is change to %d' %(self.device, baud_rate))
-                    pass
-        else:
-            self.device.baud_rate = self.baud_rate # setting baud rate from device registration 
-
         try:
             self.device_id = self.device.query(self.id_command).strip('\n').strip('\r') # try to check communication again
             self.device_status = True # device connected and device is valid
@@ -72,7 +58,7 @@ class DEVICE:
 
         except Exception as err:
             self.debugLogger.info(err)
-            self.debugLogger.warn('%s is not a valid device' %self.device_address,)
+            self.debugLogger.warn('%s is not a valid device or need to change serial configuration' %self.device_address,)
         
         if not self.deviceRegDictStatus: # if device info is not in device registration, then save the new device info to registration
             if self.device_status and self.device_id:
