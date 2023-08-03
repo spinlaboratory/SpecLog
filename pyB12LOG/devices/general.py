@@ -11,29 +11,26 @@ class DEVICE:
         self.logDir = logDir
         self.deviceRegFile = self.logDir + '/device_reg.txt'
         self.debugLogger = debugLogger
-
-        # some default settings. They can be overwritten by 'deviceRegFile' if information exists.
-        for key in SEIRAL_CONFIG:
-            for item, val in SEIRAL_CONFIG[key].items():
-                exec("self." + "%s = %s" %(item, val))
+        self.device_id = None
 
         if device_address in deviceRegDict: # check if device address is saved in device registration dictionary. The device address is the key.
-            deviceInfo = deviceRegDict[device_address][:-1] # skip the 'Address' in the value
             self.deviceRegDictStatus = True # because the device found, this value is set to True
-            self.device_status = deviceInfo[1] == 'True' # device status (valid or not)
-            self.device_manufacturer = deviceInfo[2]
-            self.model_number = deviceInfo[3]
-            self.serial_number = deviceInfo[4]
-            self.baud_rate = int(deviceInfo[5])
-            self.id_command = deviceInfo[6].strip()
-            self.termination = deviceInfo[7].strip()
-            self.split_sign = deviceInfo[8].strip()
-            self.data_index = int(deviceInfo[9])
-            self.data_bits = int(deviceInfo[10])
-            self.flow_control = int(deviceInfo[11])
-            self.parity = int(deviceInfo[12])
-            self.stop_bits = int(deviceInfo[13])
-        
+            deviceInfo = deviceRegDict[device_address] # skip the 'Address' in the value
+            index = 0
+            for key in SEIRAL_CONFIG:
+                for item, val in SEIRAL_CONFIG[key].items():
+                    # print(item, deviceInfo[index])
+                    try:
+                        exec("self." + "%s = %s" %(item, deviceInfo[index]))
+                    except:
+                        exec("self." + "%s = '%s'" %(item, deviceInfo[index]))
+                    index += 1
+        else:
+            # some default settings. They can be overwritten by 'deviceRegFile' if information exists.
+            for key in SEIRAL_CONFIG:
+                for item, val in SEIRAL_CONFIG[key].items():
+                    exec("self." + "%s = %s" %(item, val)) # execute lines defined in config
+            
         self.queryLogDict = {} # The log dictionary
         self.logDictStatus = False
         
@@ -47,7 +44,6 @@ class DEVICE:
         self.log(init = 1) # only check when init
         
     def connect(self, rm): 
-    
         if self.deviceRegDictStatus and not self.device_status: # the device info is in device registration , and device is set to invalid (disable)
             return
         else:
@@ -89,11 +85,18 @@ class DEVICE:
                     self.device_manufacturer, self.model_number, self.serial_number = None, None, None
                     self.debugLogger.warn('%s does not have a valid ID. Please update in device_reg.txt' %self.device_address)
             f = open(self.deviceRegFile, 'a')
-            for item in [self.device_address, self.device_status, self.device_manufacturer, self.model_number, self.serial_number, 
-                         self.baud_rate, self.id_command, self.termination, self.split_sign, self.data_index,
-                         self.data_bits, self.flow_control, self.parity, self.stop_bits]:
-                print(item, end = ',', file = f)
-            print(file = f)
+            index = 0
+            string = ''
+            for key in SEIRAL_CONFIG:
+                for item, val in SEIRAL_CONFIG[key].items():
+                    if index == 0:
+                        string += '{:^50}'.format(str(eval('self.' + item))) + ','
+                    else:
+                        string += '{:^25}'.format(str(eval('self.' + item))) + ','  
+                    index += 1
+                    # print(eval('self.' + item), end = ',', file = f)
+            # print(file = f)
+            print(string[:-1], file = f)
             f.close()
                 
     def reconnect(self, rm):

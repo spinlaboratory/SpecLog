@@ -95,17 +95,23 @@ class pyB12LOG:
         except: # not exists, create new file
             self.debugLogger.info('Create New Device History') 
             f = open(self.deviceRegFile, 'w')
+            index = 0
+            string = ''
             for key in SEIRAL_CONFIG:
                 for item, val in SEIRAL_CONFIG[key].items():
-                    print(item, end = ',', file = f)
-            print(file = f)
+                    if index == 0:
+                        string += '{:^50}'.format(item) + ','
+                    else:
+                        string += '{:^25}'.format(item) + ','               
+                    index += 1
+            print(string[:-1], file = f)
             # print('Address,Status,Manufacturer,Model,SN,BaudRate,idCommand,termination,splitSign,dataIndex,dataBits,flowControl,parity,stopBits', file = f) # maybe this should be put into config file?
         f = open(self.deviceRegFile, 'r')
-        line = f.readline().strip('\n').strip().split(',') # get header into dictionary
+        line = f.readline().strip('\n').strip().replace(' ', '').split(',') # get header into dictionary
         self.deviceRegDict['items'] = line
         line = f.readline().strip('\n') # get dictionary keys
         while line != '': # run until the end of file
-            line = line.strip().split(',') 
+            line = line.strip().replace(' ', '').split(',') 
             self.deviceRegDict[line[0]] = line 
             line = f.readline().strip('\n')
         f.close()
