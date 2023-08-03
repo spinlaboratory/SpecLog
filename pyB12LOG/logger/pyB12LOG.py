@@ -18,9 +18,6 @@ class pyB12LOG:
         self.validAddresses = []
         self.validDevices = []
 
-        self.historicalAddresses = []
-        self.historicalDevices = []
-
         self.rm = pyvisa.ResourceManager()
         self.deviceAddresses = self.rm.list_resources()
         self.updateValidDevices(init = 1)
@@ -54,14 +51,7 @@ class pyB12LOG:
 
             for address in newDeviceAddressList:
                 self.debugLogger.warn('%s Found!' %address)
-                if address in self.historicalAddresses:
-                    device = self.historicalDevices[self.historicalAddresses.index(address)]
-                    device.reconnect(self.rm)
-                    
-                else:
-                    device = general.DEVICE(address, self.rm, self.deviceRegDict, self.logDir, self.debugLogger, self.fileSize)
-                    self.historicalAddresses.append(address)
-                    self.historicalDevices.append(device)
+                device = general.DEVICE(address, self.rm, self.deviceRegDict, self.logDir, self.debugLogger, self.fileSize)
                     
                 if device.device_id != None:
                     deviceList.append(device)
@@ -86,7 +76,6 @@ class pyB12LOG:
                     del self.validDevices[address_index]
                     self.deviceAddresses = self.rm.list_resources()
 
-
     def initDeviceRegDict(self):
         ## get device registration
         ## dictionary format: {Address: [Address, Status, Manufacturer, Model, SN, BaudRate...]}
@@ -105,7 +94,6 @@ class pyB12LOG:
                         string += '{:^25}'.format(item) + ','               
                     index += 1
             print(string[:-1], file = f)
-            # print('Address,Status,Manufacturer,Model,SN,BaudRate,idCommand,termination,splitSign,dataIndex,dataBits,flowControl,parity,stopBits', file = f) # maybe this should be put into config file?
         f = open(self.deviceRegFile, 'r')
         line = f.readline().strip('\n').strip().replace(' ', '').split(',') # get header into dictionary
         self.deviceRegDict['items'] = line
@@ -127,7 +115,7 @@ class pyB12LOG:
         configKey = 'CONFIG'
         logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
         timeDelay = float(CONFIG[configKey]['log_interval'])
-        fileSize = int(CONFIG[configKey]['save_file_size_kb']) * 1028
+        fileSize = int(CONFIG[configKey]['save_file_size_kb']) * 1024
 
         listDir = os.listdir(logDirHome)
         logDir= logDirHome +'/B12TLOG/'

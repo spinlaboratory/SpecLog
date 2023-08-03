@@ -63,13 +63,13 @@ class DEVICE:
         if not self.deviceRegDictStatus: # if device info is not in device registration, then save the new device info to registration
             if self.device_status and self.device_id:
                 try:
-                    self.device_id = self.device.query(self.id_command).strip('\n').strip('\r')
                     self.device_manufacturer = self.device_id.split(self.splitter)[0]
                     self.model_number = self.device_id.split(self.splitter)[1]
                     self.serial_number = self.device_id.split(self.splitter)[2]
                 except:
-                    self.device_manufacturer, self.model_number, self.serial_number = None, None, None
+                    self.device_status, self.device_manufacturer, self.model_number, self.serial_number = False, None, None, None
                     self.debugLogger.warn('%s does not have a valid ID. Please update in device_reg.txt' %self.device_address)
+            
             f = open(self.deviceRegFile, 'a')
             index = 0
             string = ''
@@ -80,8 +80,6 @@ class DEVICE:
                     else:
                         string += '{:^25}'.format(str(eval('self.' + item))) + ','  
                     index += 1
-                    # print(eval('self.' + item), end = ',', file = f)
-            # print(file = f)
             print(string[:-1], file = f)
             f.close()
                 
@@ -173,7 +171,7 @@ class DEVICE:
             raise TypeError('Stop bits Incorrect')
 
     def log(self , init = 0):
-        if self.device_id != None and self.logDictStatus and self.device_status:
+        if self.device_id and self.logDictStatus and self.device_status:
             today = datetime.date.today()
             if init or self.createFile:
                 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S') #YYYYMMDDHMS
