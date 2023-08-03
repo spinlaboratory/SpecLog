@@ -7,5 +7,3 @@ while(1):
     except Exception as err:
         print(err)
         log = pyB12LOG()
-
-

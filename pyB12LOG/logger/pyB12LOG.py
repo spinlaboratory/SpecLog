@@ -4,7 +4,7 @@ from devices import general
 import time
 import logging
 import os
-from config.config import CONFIG
+from config.config import CONFIG, SEIRAL_CONFIG
 
 class pyB12LOG:
     def __init__(self):
@@ -35,7 +35,7 @@ class pyB12LOG:
                 self.historicalAddresses.append(address)
                 self.historicalDevices.append(device)
 
-                if device.deviceID != None:
+                if device.device_id != None:
                     deviceList.append(device)
                     addressList.append(address)
 
@@ -63,7 +63,7 @@ class pyB12LOG:
                     self.historicalAddresses.append(address)
                     self.historicalDevices.append(device)
                     
-                if device.deviceID != None:
+                if device.device_id != None:
                     deviceList.append(device)
                     addressList.append(address)
 
@@ -95,10 +95,14 @@ class pyB12LOG:
         except: # not exists, create new file
             self.debugLogger.info('Create New Device History') 
             f = open(self.deviceRegFile, 'w')
-            print('Address,Status,Manufacturer,Model,SN,BaudRate,idCommand,terminal,splitSign,dataIndex,dataBits,flowControl,parity,stopBits', file = f) # maybe this should be put into config file?
+            for key in SEIRAL_CONFIG:
+                for item, val in SEIRAL_CONFIG[key].items():
+                    print(item, end = ',', file = f)
+            print(file = f)
+            # print('Address,Status,Manufacturer,Model,SN,BaudRate,idCommand,termination,splitSign,dataIndex,dataBits,flowControl,parity,stopBits', file = f) # maybe this should be put into config file?
         f = open(self.deviceRegFile, 'r')
-        
-        line = f.readline() # avoid putting header into dictionary
+        line = f.readline().strip('\n').strip().split(',') # get header into dictionary
+        self.deviceRegDict['items'] = line
         line = f.readline().strip('\n') # get dictionary keys
         while line != '': # run until the end of file
             line = line.strip().split(',') 

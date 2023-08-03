@@ -50,7 +50,7 @@ def _kwarg_converter(s: str):
     return args, kwargs
 
 
-def _get_log_config(configname):
+def _get_log_config(configname, key = None):
     config = configparser.ConfigParser(
         converters={
             "list": lambda x: list(x.strip("[").strip("]").split(",")),
@@ -58,12 +58,8 @@ def _get_log_config(configname):
         }
     )
     # define three possible locations:
-    # log_current_config = Path.cwd() / configname
-    # log_home_config = Path.home() / configname
-    # config_read_list = [log_global_config, log_home_config, log_current_config]
-
-    # # user defined takes precedence
-    # config.read(config_read_list)
+    log_current_config = Path.cwd() / configname
+    log_home_config = Path.home() / configname
     
     log_cfg_folder = str(
         Path(__file__).parent
@@ -71,21 +67,29 @@ def _get_log_config(configname):
 
     log_global_config = Path(log_cfg_folder) / configname
 
-    # check if command location
-    log_public = 'C:/Users/Public/'
-    list_dir = os.listdir(log_public)
-    log_dir = log_public + 'B12TLOG_Config'
-    if 'B12TLOG_Config' not in list_dir:
-        os.mkdir(log_dir) 
-    
-    log_public_config = log_dir + '/' + configname
-    
-    if configname not in os.listdir(log_dir):
-        shutil.copy(log_global_config, log_dir + '/' + configname)
-    
-    config.read(log_public_config)
-    
+    if key == 'public':
+        # copy command to public location
+        # check if command location
+        log_public = 'C:/Users/Public/'
+        list_dir = os.listdir(log_public)
+        log_dir = log_public + 'B12TLOG_Config'
+        if 'B12TLOG_Config' not in list_dir:
+            os.mkdir(log_dir) 
+        
+        log_public_config = log_dir + '/' + configname
+        
+        if configname not in os.listdir(log_dir):
+            shutil.copy(log_global_config, log_dir + '/' + configname)
+        
+        config.read(log_public_config)
+    else:
+        config_read_list = [log_global_config, log_home_config, log_current_config]
+
+        # user defined takes precedence
+        config.read(config_read_list)
+
     return config
 
-COMMAND = _get_log_config("command.cfg")
-CONFIG = _get_log_config("config.cfg")
+COMMAND = _get_log_config("command.cfg", key = 'public')
+CONFIG = _get_log_config("config.cfg", key = 'public')
+SEIRAL_CONFIG = _get_log_config("serial.cfg", key = 'global')
