@@ -1,6 +1,5 @@
 from logger import pyB12LOG
 log = pyB12LOG()
-
 while(1):
     try:
         log.log()
