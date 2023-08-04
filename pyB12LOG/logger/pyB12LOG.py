@@ -5,21 +5,23 @@ import time
 import logging
 import os
 from config.config import CONFIG, SEIRAL_CONFIG
+from configparser import ConfigParser
 
 class pyB12LOG:
     def __init__(self):
-        self.timeDelay, self.logDir, self.fileSize = self.getConfig() 
+        self.timeDelay, self.logDir, self.fileSize = self.getLogSettings() 
         self.debugLogger = self.initDebugLog(self.logDir)
+
+        self.rm = pyvisa.ResourceManager()
+        self.deviceAddresses = self.rm.list_resources()
 
         self.deviceRegFile = self.logDir + '/device_reg.txt' # file to device registration 
         self.deviceRegDict = {} # dictionary to store information from device registration 
         self.initDeviceRegDict() # put information from device registration to dictionary
-
+        self.getDeviceConfig()
         self.validAddresses = []
         self.validDevices = []
 
-        self.rm = pyvisa.ResourceManager()
-        self.deviceAddresses = self.rm.list_resources()
         self.updateValidDevices(init = 1)
         self.lastCheckTime = time.time()
 
@@ -74,6 +76,64 @@ class pyB12LOG:
                     del self.validDevices[address_index]
                     self.deviceAddresses = self.rm.list_resources()
 
+    def getDeviceConfig(self):
+        self.deviceConfig = ConfigParser() # Class
+
+        # Find device config path
+        configKey = 'CONFIG'
+        deviceConfigDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
+        self.deviceConfigDir= deviceConfigDirHome +'/B12TLOG_Config/'
+        listDir = os.listdir(self.deviceConfigDir)
+
+        # Create device config if not exists
+        if 'device_config.cfg' not in listDir:
+
+            # Put current available addresses and required items for serial communication to list
+            items = []
+            for key in SEIRAL_CONFIG:
+                items.extend([item for item in SEIRAL_CONFIG[key].keys()])
+            
+            # List cannot be modified in config
+            self.deviceConfig['GENERAL'] = {
+                'device_addresses': ", ".join(list(self.deviceAddresses)),
+                'items': ", ".join(items),            
+            }
+
+            # initial with current device info
+            for address in self.deviceAddresses:
+                self.deviceConfig[address] = {}
+                for key in SEIRAL_CONFIG:
+                    self.deviceConfig[address] = {**self.deviceConfig[address],
+                        **{item: val for item, val in SEIRAL_CONFIG[key].items() 
+                    }}
+            with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
+                self.deviceConfig.write(conf)
+        
+        else:
+            self.updateDeviceConfig()
+
+    def updateDeviceConfig(self):
+        self.deviceConfig.read(self.deviceConfigDir + '/device_config.cfg')
+        self.deviceAddresses = self.rm.list_resources()
+
+        # if addresses in config file is different from current available address
+        if self.deviceConfig['GENERAL']["device_addresses"] != ", ".join(list(self.deviceAddresses)):
+            # update the device addresses in config file
+            self.deviceConfig['GENERAL']["device_addresses"] = ", ".join(list(self.deviceAddresses))
+
+            # new device appear
+            for address in self.deviceAddresses:
+                if address not in self.deviceConfig.sections():
+                    self.deviceConfig[address] = {}
+                    for key in SEIRAL_CONFIG:
+                        self.deviceConfig[address] = {
+                            **self.deviceConfig[address],
+                            **{item: val for item, val in SEIRAL_CONFIG[key].items()} 
+                        }
+            
+                with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
+                    self.deviceConfig.write(conf)
+
     def initDeviceRegDict(self):
         ## get device registration
         ## dictionary format: {Address: [Address, Status, Manufacturer, Model, SN, BaudRate...]}
@@ -109,7 +169,7 @@ class pyB12LOG:
                 device.log()
             self.lastCheckTime = time.time()
     
-    def getConfig(self):
+    def getLogSettings(self):
         configKey = 'CONFIG'
         logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
         timeDelay = float(CONFIG[configKey]['log_interval'])
