@@ -1,25 +1,39 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import csv
 import datetime
 
 class plotter:
-    def __init__(self, log):
-        self.logDir = log
+    def __init__(self, logDir):
+        self.logDir = logDir
         self.header = None
         self.items = None
-        self.hashDict = None
+        self.hashDict = {}
+        self.log_list = os.listdir(self.logDir)
         self.f = None
-        
+        self.current_log = None
+        self.log_index = 1 # debug log is always index 0
+
         self.logRead()
+
     
     def logRead(self):
-        self.f = open(self.log, 'r')
-        self.items = self.f.readline().strip('\n').split(',')
-        self.hashDict ={x.strip(): [] for x in self.items}
-        
-        for info in csv.reader(self.f, delimiter = ','): # O(1)
-            self.hashDict = self.hashDict_append(info, self.hashDict) # O(n)
+        self.log_list = os.listdir(self.logDir)
+        while self.current_log != self.log_list[-1]: 
+            self.current_log = self.log_list[self.log_index] # update current log
+            if 'log_' in self.current_log:
+                self.current_log = self.current_log
+                self.f = open(self.logDir + self.current_log, 'r')
+                
+                self.items = self.f.readline().strip('\n').split(',')
+                for x in self.items:
+                    if x.strip() not in self.hashDict:
+                        self.hashDict[x.strip()] = []
+
+                for data in csv.reader(self.f, delimiter = ','): # O(1)
+                    self.hashDict = self.hashDict_append(data, self.hashDict) # O(n)
+            self.log_index += 1
 
     def hashDict_append(self, info, hashDict):
         for index, key in enumerate(hashDict.keys()):
@@ -53,6 +67,7 @@ class plotter:
 
         while(plt.fignum_exists(1)):
 
+            self.logRead() # check if new log creates
             # where = f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
             if line: # if there is non-empty new line
