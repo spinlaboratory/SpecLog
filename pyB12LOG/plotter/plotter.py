@@ -15,7 +15,7 @@ class plotter:
         self.f = None
         self.current_log = None
         self.log_index = 1 # debug log is always index 0
-        self.pnts = 1e5
+        self.max_pnts = int(1e4)
 
         self.logRead()
 
@@ -51,23 +51,21 @@ class plotter:
     def plot(self, items):
         # taking care of 
         self.time_length = len(self.hashDict['Time'])
-        if self.time_length < self.pnts: 
-            x = [i for i in range(1, self.time_length + 1)]
-            x_ticks = [x[0], x[self.time_length//2], x[-1]]
-            x_label = [self.hashDict['Time'][0], self.hashDict['Time'][self.time_length//2] , self.hashDict['Time'][-1]]
-            ys = [self.hashDict[item] for item in items]
-
+        if self.time_length < self.max_pnts: 
+            self.pnts = self.time_length//2
         else:
-            x = [i for i in range(1, self.pnts + 1)]
-            x_ticks = [x[0], x[self.pnts//2], x[-1]]
-            x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
-            ys = [self.hashDict[item][-self.pnts:] for item in items]
+            self.pnts = self.max_pnts//2
+            
+        x = [i for i in range(1, self.pnts + 1)]
+        x_ticks = [x[0], x[self.pnts//2], x[-1]]
+        x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
+        ys = [self.hashDict[item][-self.pnts:] for item in items]
 
         color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC']
 
         # init figure
         fig = plt.figure(1, figsize = (16,12))
-        plt.subplots_adjust(left=0.25)
+        plt.subplots_adjust(left=0.25, bottom = 0.25)
         ax = fig.add_subplot(1,1,1)
         update_require = 0
 
@@ -101,6 +99,34 @@ class plotter:
 
         check.on_clicked(callback)
 
+        # slider bar
+        self.slider_pnts = int(self.max_pnts / 2)
+
+        slider_ax = fig.add_axes([0.25, 0.15, 0.65, 0.03], facecolor = '#F37021')
+        
+        sTime = Slider(
+            ax=slider_ax,
+            label='Zoom',
+            valmin= 2,
+            valmax = self.max_pnts,
+            valinit = int(self.max_pnts / 2),
+        )
+        
+        sTime.valtext.set_visible(False)
+
+        def update(val):
+            self.slider_pnts = int(sTime.val)
+        
+        sTime.on_changed(update)
+
+        # reset
+        resetax = plt.axes([0.8, 0.08, 0.1, 0.04])
+        button = Button(resetax, 'Reset', color='lightgoldenrodyellow', hovercolor='0.975')
+
+        def reset(event):
+            sTime.reset()
+        button.on_clicked(reset)
+
         while(plt.fignum_exists(1)):
 
             self.logRead() # check if new log creates
@@ -109,17 +135,14 @@ class plotter:
             if line: # if there is non-empty new line
                 self.hashDict_append(line.strip('\n').split(','), self.hashDict)
                 self.time_length = len(self.hashDict['Time'])
-                if self.time_length < self.pnts: 
-                    x = [i for i in range(1, self.time_length + 1)]
-                    x_ticks = [x[0], x[self.time_length//2], x[-1]]
-                    x_label = [self.hashDict['Time'][0], self.hashDict['Time'][self.time_length//2] , self.hashDict['Time'][-1]]
-                    ys = [self.hashDict[item] for item in items]
 
-                else:
-                    x = [i for i in range(1, pnts + 1)]
-                    x_ticks = [x[0], x[pnts//2], x[-1]]
-                    x_label = [self.hashDict['Time'][-pnts:][0], self.hashDict['Time'][-pnts:][pnts//2] , self.hashDict['Time'][-pnts:][-1]]
-                    ys = [self.hashDict[item][-pnts:] for item in items]
+                self.pnts = self.time_length if self.time_length < self.max_pnts else self.max_pnts
+                self.pnts = min(self.slider_pnts, self.pnts)
+      
+                x = [i for i in range(1, self.pnts + 1)]
+                x_ticks = [x[0], x[self.pnts//2], x[-1]]
+                x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
+                ys = [self.hashDict[item][-self.pnts:] for item in items]
                 update_require = 1
 
             else: # if there is no line
