@@ -152,8 +152,8 @@ class plotter:
                     ax.grid(ls = ':')
                     for index, (y, color) in enumerate(zip(ys, color_lists)):
                         label = items[index]
-                        l, = ax.plot(x, y, color, label = label)
-                        l.set_visible(self.visibility_by_label[label])
+                        if self.visibility_by_label[label]:
+                            ax.plot(x, y, color, label = label)
 
                     ax.set_xticks(x_ticks)
                     ax.set_xticklabels(x_label)
