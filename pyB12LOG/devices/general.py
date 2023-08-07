@@ -31,25 +31,26 @@ class DEVICE:
         self.deviceConfig.read(self.deviceConfigDirFile)
         for address in rm.list_resources():
             if self.deviceConfig[address]['device_status'] == 'True' and address not in self.active_addresses:
+                serial_settings_dict = {}
                 for item, val in self.deviceConfig[address].items():
-                    exec("%s = %s" %(item, val), globals()) # assign value from config. Be careful about changing it
+                    exec("serial_settings_dict['%s'] = %s" %(item, val)) # assign value from config. Be careful about changing it
                 try:
-                    inst = rm.open_resource(device_address)
-                    inst.baud_rate=baud_rate
-                    inst.data_bits=data_bits
-                    inst.flow_control=flow_control 
-                    inst.parity=parity
-                    inst.stop_bits=stop_bits
-                    inst.read_termination = termination
-                    inst.write_termination = termination
+                    inst = rm.open_resource(serial_settings_dict['device_address'])
+                    inst.baud_rate=serial_settings_dict['baud_rate']
+                    inst.data_bits=serial_settings_dict['data_bits']
+                    inst.flow_control=serial_settings_dict['flow_control']
+                    inst.parity=serial_settings_dict['parity']
+                    inst.stop_bits=serial_settings_dict['stop_bits']
+                    inst.read_termination = serial_settings_dict['termination']
+                    inst.write_termination = serial_settings_dict['termination']
   
-                    device_id = inst.query(id_command).strip('\r').strip('\n').strip()
+                    device_id = inst.query(serial_settings_dict['id_command']).strip('\r').strip('\n').strip()
                     self.debugLogger.info('%s connected!' %device_id)
 
-                    if not device_manufacturer or not model_number or not serial_number:
-                        add_device_manufacturer = device_id.split(split_sign)[0]
-                        add_model_number = device_id.split(split_sign)[1]
-                        add_serial_number = device_id.split(split_sign)[2]
+                    if not serial_settings_dict['device_manufacturer'] or not serial_settings_dict['model_number'] or not serial_settings_dict['serial_number']:
+                        add_device_manufacturer = device_id.split(serial_settings_dict['split_sign'])[0]
+                        add_model_number = device_id.split(serial_settings_dict['split_sign'])[1]
+                        add_serial_number = device_id.split(serial_settings_dict['split_sign'])[2]
                         self.deviceConfig[address]['device_manufacturer'] = "'%s'" %add_device_manufacturer
                         self.deviceConfig[address]['model_number'] = "'%s'" %add_model_number
                         self.deviceConfig[address]['serial_number'] = "'%s'" %add_serial_number
