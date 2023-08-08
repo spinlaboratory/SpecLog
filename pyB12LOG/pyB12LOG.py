@@ -7,11 +7,11 @@ Company: Bridge 12 Technologies, Inc
 """
 
 import pyvisa
-from general import *
+from .general import *
 import time
 import logging
 import os
-from config.config import CONFIG, SEIRAL_CONFIG
+from .config.config import CONFIG, SEIRAL_CONFIG
 from configparser import ConfigParser
 
 class pyB12LOG:

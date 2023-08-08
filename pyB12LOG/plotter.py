@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import csv
 import datetime
 from matplotlib.widgets import Button, RadioButtons, CheckButtons, Slider 
-from config.config import CONFIG
+from .config.config import CONFIG
 
 class plotter:
     def __init__(self, max_pnts = 1e4):

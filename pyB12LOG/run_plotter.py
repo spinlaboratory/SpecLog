@@ -1,3 +1,7 @@
-from plotter import *
+from .plotter import *
 
-fig = plotter()
+def main_func():
+    fig = plotter()
+
+if __name__ == "__main__":
+    main_func()

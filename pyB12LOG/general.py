@@ -10,7 +10,7 @@ import pyvisa
 from pyvisa.constants import Parity, StopBits
 import time
 import datetime
-from config.config import CONFIG
+from .config.config import CONFIG
 from configparser import ConfigParser
 
 rm = pyvisa.ResourceManager()

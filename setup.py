@@ -28,6 +28,12 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=['pyvisa', 'matplotlib'],
+    entry_points = dict(
+        console_scripts = [
+            "pyB12logger = pyB12LOG.run_logger:main_func",
+            "pyB12plotter = pyB12LOG.run_plotter:main_func"
+        ]
+    ),
     package_data={"pyB12LOG": ["config/command.cfg", "config/config.cfg", "config/serial.cfg"]},
     data_files = [('share/application', ['config.cfg'])],
 )
