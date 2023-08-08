@@ -17,6 +17,7 @@ class pyB12LOG:
         self.getDeviceConfig()
         self.lastCheckTime = time.time()
         self.device = general.DEVICE(self.debugLogger)
+        self.first_log = True
         
     def getDeviceConfig(self):
         self.deviceConfig = ConfigParser() # Class
@@ -80,9 +81,18 @@ class pyB12LOG:
     def log(self):
         self.updateDeviceConfig()
         if time.time() - self.lastCheckTime > self.timeDelay:
+            self.logStartTime = time.time()
             self.device.log()
             self.lastCheckTime = time.time()
-
+            self.logDeltaTime = self.lastCheckTime - self.logStartTime
+            
+            if self.first_log:
+                self.debugLogger.info('Log interval of %0.1f s. Logging takes %0.1f s to complete.' %(self.timeDelay, self.logDeltaTime))
+                self.first_log = False
+            if self.logDeltaTime > self.timeDelay:
+                self.debugLogger.info('Log interval of %0.1f s is too short. Logging takes %0.1f s to complete. Log interval is set to %0.1f s.' %(self.timeDelay, self.logDeltaTime, self.logDeltaTime + 0.1))
+                self.timeDelay = self.logDeltaTime + 0.1
+            
     def getLogSettings(self):
         configKey = 'CONFIG'
         logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
