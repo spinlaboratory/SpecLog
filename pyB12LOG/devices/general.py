@@ -43,7 +43,6 @@ class DEVICE:
                     inst.read_termination = serial_settings_dict['termination']
                     inst.write_termination = serial_settings_dict['termination']
   
-                    inst.query(serial_settings_dict['id_command']).strip('\r').strip('\n').strip() # first check
                     device_id = inst.query(serial_settings_dict['id_command']).strip('\r').strip('\n').strip() # actually query ID from device
                     self.debugLogger.info('%s connected!' %device_id)
 
