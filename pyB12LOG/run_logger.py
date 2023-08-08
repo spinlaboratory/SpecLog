@@ -1,4 +1,4 @@
-from logger import pyB12LOG
+from pyB12LOG import *
 log = pyB12LOG()
 debugLogger = log.initDebugLog()
 while(1):

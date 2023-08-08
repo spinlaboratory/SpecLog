@@ -7,7 +7,7 @@ Company: Bridge 12 Technologies, Inc
 """
 
 import pyvisa
-from devices import general 
+import general 
 import time
 import logging
 import os
