@@ -29,7 +29,7 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=['pyvisa', 'matplotlib'],
     entry_points = dict(
-        console_scripts = [
+        gui_scripts = [
             "pyB12logger = pyB12LOG.run_logger:main_func",
             "pyB12plotter = pyB12LOG.run_plotter:main_func"
         ]

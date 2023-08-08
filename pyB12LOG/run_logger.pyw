@@ -1,4 +1,4 @@
-from pyB12LOG import *
+from .pyB12LOG import *
 
 def main_func():
     log = pyB12LOG()
