@@ -7,7 +7,7 @@ Company: Bridge 12 Technologies, Inc
 """
 
 import pyvisa
-import general 
+from general import *
 import time
 import logging
 import os
@@ -24,7 +24,7 @@ class pyB12LOG:
 
         self._getDeviceConfig()
         self.lastCheckTime = time.time()
-        self.device = general.DEVICE(self.debugLogger)
+        self.device = DEVICE(self.debugLogger)
         self.firstLog = True
         
     def _getDeviceConfig(self):
