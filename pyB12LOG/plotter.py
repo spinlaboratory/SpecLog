@@ -71,7 +71,9 @@ class plotter:
             
         x = [i for i in range(1, self.pnts + 1)]
         x_ticks = [x[0], x[self.pnts//2], x[-1]]
-        x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
+        x_label = [self.hashDict['Date'][-self.pnts:][0] +'\n'+ self.hashDict['Time'][-self.pnts:][0], 
+                   self.hashDict['Date'][-self.pnts:][self.pnts//2] +'\n'+ self.hashDict['Time'][-self.pnts:][self.pnts//2], 
+                   self.hashDict['Date'][-self.pnts:][-1] +'\n'+ self.hashDict['Time'][-self.pnts:][-1]]
         ys = [self.hashDict[item][-self.pnts:] for item in items]
 
         color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC'] * (len(items) // 4) 
@@ -160,7 +162,9 @@ class plotter:
       
                 x = [i for i in range(1, self.pnts + 1)]
                 x_ticks = [x[0], x[self.pnts//2], x[-1]]
-                x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
+                x_label = [self.hashDict['Date'][-self.pnts:][0] +'\n'+ self.hashDict['Time'][-self.pnts:][0], 
+                           self.hashDict['Date'][-self.pnts:][self.pnts//2] +'\n'+ self.hashDict['Time'][-self.pnts:][self.pnts//2], 
+                           self.hashDict['Date'][-self.pnts:][-1] +'\n'+ self.hashDict['Time'][-self.pnts:][-1]]
                 ys = [self.hashDict[item][-self.pnts:] for item in items]
                 self.slider_bar_updates = False
 
