@@ -1,25 +1,35 @@
+"""
+pyB12LOG: The logging program for instrumentations
+
+Author: Yen-Chun Huang
+
+Company: Bridge 12 Technologies, Inc
+"""
+
 import pyvisa
-from devices import general 
+from .general import *
 import time
 import logging
 import os
-from config.config import CONFIG, SEIRAL_CONFIG
+from .config.config import CONFIG, SEIRAL_CONFIG
 from configparser import ConfigParser
 
 class pyB12LOG:
     def __init__(self):
-        self.timeDelay, self.logDir, self.fileSize = self.getLogSettings() 
+        self.timeDelay, self.logDir, self.fileSize = self._getLogSettings() 
         self.debugLogger = self.initDebugLog()
 
         self.rm = pyvisa.ResourceManager()
         self.deviceAddresses = self.rm.list_resources()
 
-        self.getDeviceConfig()
+        self._getDeviceConfig()
         self.lastCheckTime = time.time()
-        self.device = general.DEVICE(self.debugLogger)
+        self.device = DEVICE(self.debugLogger)
+        self.firstLog = True
         
-    def getDeviceConfig(self):
-        self.deviceConfig = ConfigParser() # Class
+    def _getDeviceConfig(self):
+        # To find device config file
+        self.deviceConfig = ConfigParser()
 
         # Find device config path
         configKey = 'CONFIG'
@@ -53,9 +63,10 @@ class pyB12LOG:
                 self.deviceConfig.write(conf)
         
         else:
-            self.updateDeviceConfig()
+            self._updateDeviceConfig()
 
-    def updateDeviceConfig(self):
+    def _updateDeviceConfig(self):
+        # To update device config file 
         self.deviceConfig.read(self.deviceConfigDir + '/device_config.cfg')
         self.deviceAddresses = self.rm.list_resources()
 
@@ -78,12 +89,21 @@ class pyB12LOG:
                 with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
                     self.deviceConfig.write(conf)
     def log(self):
-        self.updateDeviceConfig()
+        self._updateDeviceConfig()
         if time.time() - self.lastCheckTime > self.timeDelay:
+            self.logStartTime = time.time()
             self.device.log()
             self.lastCheckTime = time.time()
-
-    def getLogSettings(self):
+            self.logDeltaTime = self.lastCheckTime - self.logStartTime
+            
+            if self.firstLog:
+                self.debugLogger.info('Log interval of %0.1f s. Logging takes %0.1f s to complete.' %(self.timeDelay, self.logDeltaTime))
+                self.firstLog = False
+            if self.logDeltaTime > self.timeDelay:
+                self.debugLogger.info('Log interval of %0.1f s is too short. Logging takes %0.1f s to complete. Log interval is set to %0.1f s.' %(self.timeDelay, self.logDeltaTime, self.logDeltaTime + 0.1))
+                self.timeDelay = self.logDeltaTime + 0.1
+            
+    def _getLogSettings(self):
         configKey = 'CONFIG'
         logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
         timeDelay = float(CONFIG[configKey]['log_interval'])
