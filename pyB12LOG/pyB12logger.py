@@ -10,9 +10,9 @@ def main_func():
     parser = argparse.ArgumentParser(prog='pyB12logger')
     parser.add_argument('status', type=str, nargs='?', default = 'start', choices = ['start', 'stop'],
                         help='To start/stop pyB12logger. If no argument, the pyB12logger will start by default')
-    parser.add_argument('-desktop', type=str, default = False,
+    parser.add_argument('-desktop', type=str, default = False, choices = ['True', 'False'],
                         help='To create desktop icons')
-    parser.add_argument('-startup', type=str, default = None,
+    parser.add_argument('-startup', type=str, default = None, choices = ['True', 'False'],
                         help='To enable/disable pyB12logger at startup.')
     args = parser.parse_args()
     if args.status == 'start':
