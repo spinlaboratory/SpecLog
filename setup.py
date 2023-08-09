@@ -30,11 +30,13 @@ setuptools.setup(
     install_requires=['pyvisa', 'matplotlib'],
     entry_points = dict(
         gui_scripts = [
+            "pyB12plotter = pyB12LOG.run_plotter:main_func",
             "pyB12logger_running = pyB12LOG.run_logger:main_func",
         ],
         console_scripts = [
             "pyB12logger = pyB12LOG.pyB12logger:main_func",
-            "pyB12plotter = pyB12LOG.run_plotter:main_func",
+            "pyB12plotter_debug = pyB12LOG.run_plotter:main_func",            
+            "pyB12logger_debug = pyB12LOG.run_logger:main_func",
         ],
     ),
     package_data={"pyB12LOG": ["config/command.cfg", "config/config.cfg", "config/serial.cfg"]},

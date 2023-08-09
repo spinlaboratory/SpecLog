@@ -14,6 +14,8 @@ def main_func():
                         help='To create desktop icons')
     parser.add_argument('-startup', type=str, default = None, choices = ['True', 'False'],
                         help='To enable/disable pyB12logger at startup.')
+    parser.add_argument('-debug', type=str, default = 'False', choices = ['True', 'False'],
+                        help='To start debug console pyB12logger.')
     args = parser.parse_args()
     if args.status == 'start':
         current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
@@ -51,16 +53,21 @@ def main_func():
                 print('pyB12plotter.exe is on desktop already.')
 
 
-        if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_running.exe'] > 0:
+        if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_running.exe'] > 0 or 'pyB12logger_debug.exe' in hashDict and hashDict['pyB12logger_debug.exe'] > 0:
             print('pyB12logger has started already.')
             return 
         
-        else:            
-            os.startfile('pyB12logger_running.exe')
-            print('pyB12logger starts')
+        else:
+            if args.debug == 'False':          
+                os.startfile('pyB12logger_running.exe')
+                print('pyB12logger starts')
+            elif args.debug == 'True': 
+                os.startfile('pyB12logger_debug.exe')
+                print('pyB12logger debug mode starts')
     
     elif args.status == 'stop':
         os.system("taskkill /im pyB12logger_running.exe /F")
+        os.system("taskkill /im pyB12logger_debug.exe /F")
         print('pyB12logger stops')
     else:
         return

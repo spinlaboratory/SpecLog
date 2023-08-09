@@ -5,7 +5,7 @@ from .pyB12LOG import *
 def main_func():
     current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
     hashDict = Counter(current_exe) 
-    if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_run.exe'] > 1:
+    if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_running.exe'] > 1:
         return 
     else:
         log = pyB12LOG()
