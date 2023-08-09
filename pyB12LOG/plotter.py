@@ -125,9 +125,11 @@ class plotter:
         )
         
         sTime.valtext.set_visible(False)
+        self.slider_bar_updates = False
 
         def update(val):
             self.slider_pnts = int(sTime.val)
+            self.slider_bar_updates = True
         
         sTime.on_changed(update)
 
@@ -142,12 +144,15 @@ class plotter:
         while(plt.fignum_exists(1)):
 
             self.logRead() # check if new log creates
-            # where = f.tell() # (option) f current position of pointer
+            # where = self.f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
             if line: # if there is non-empty new line
                 self.hashDict_append(line.strip('\n').split(','), self.hashDict)
                 self.time_length = len(self.hashDict['Time'])
+                update_require = 1          
 
+            if update_require or self.slider_bar_updates:    
+                # updates plotting information       
                 self.pnts = self.time_length if self.time_length < self.max_pnts else self.max_pnts
                 self.pnts = min(self.slider_pnts, self.pnts)
       
@@ -155,23 +160,21 @@ class plotter:
                 x_ticks = [x[0], x[self.pnts//2], x[-1]]
                 x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
                 ys = [self.hashDict[item][-self.pnts:] for item in items]
-                update_require = 1
+                self.slider_bar_updates = False
 
-            else: # if there is no line
-                if update_require:               
-                    # f.seek(where) # (option) find current pointer
-                    ax.clear()
-                    ax.grid(ls = ':')
-                    for index, (y, color) in enumerate(zip(ys, color_lists)):
-                        label = items[index]
-                        if self.visibility_by_label[label]:
-                            ax.plot(x, y, color, label = label)
+                # self.f.seek(where) # (option) find current pointer
+                ax.clear()
+                ax.grid(ls = ':')
+                for index, (y, color) in enumerate(zip(ys, color_lists)):
+                    label = items[index]
+                    if self.visibility_by_label[label]:
+                        ax.plot(x, y, color, label = label)
 
-                    ax.set_xticks(x_ticks)
-                    ax.set_xticklabels(x_label)
-                    ax.set_xlabel('Time')
+                ax.set_xticks(x_ticks)
+                ax.set_xticklabels(x_label)
+                ax.set_xlabel('Time')
 
-                    update_require = 0
+                update_require = 0
 
             plt.pause(0.01) # showing new plot
     
