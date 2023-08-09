@@ -26,6 +26,7 @@ class plotter:
         self.current_log = None
         self.log_index = 1 # debug log is always index 0
         self.max_pnts = int(max_pnts)
+        self.update_figure = True
 
         self.logRead()
         self.plot()
@@ -108,6 +109,7 @@ class plotter:
         
         def callback(label):
             self.visibility_by_label[label] = not self.visibility_by_label[label]
+            self.update_figure = True
 
         check.on_clicked(callback)
 
@@ -125,11 +127,10 @@ class plotter:
         )
         
         sTime.valtext.set_visible(False)
-        self.slider_bar_updates = False
 
         def update(val):
             self.slider_pnts = int(sTime.val)
-            self.slider_bar_updates = True
+            self.update_figure = True
         
         sTime.on_changed(update)
 
@@ -139,6 +140,7 @@ class plotter:
 
         def reset(event):
             sTime.reset()
+            self.update_figure = True
         button.on_clicked(reset)
 
         while(plt.fignum_exists(1)):
@@ -149,9 +151,9 @@ class plotter:
             if line: # if there is non-empty new line
                 self.hashDict_append(line.strip('\n').split(','), self.hashDict)
                 self.time_length = len(self.hashDict['Time'])
-                update_require = 1          
+                self.update_figure = True        
 
-            if update_require or self.slider_bar_updates:    
+            if self.update_figure:    
                 # updates plotting information       
                 self.pnts = self.time_length if self.time_length < self.max_pnts else self.max_pnts
                 self.pnts = min(self.slider_pnts, self.pnts)
@@ -174,7 +176,7 @@ class plotter:
                 ax.set_xticklabels(x_label)
                 ax.set_xlabel('Time')
 
-                update_require = 0
+                self.update_figure = False
 
             plt.pause(0.01) # showing new plot
     
