@@ -73,7 +73,7 @@ class plotter:
         x_label = [self.hashDict['Time'][-self.pnts:][0], self.hashDict['Time'][-self.pnts:][self.pnts//2] , self.hashDict['Time'][-self.pnts:][-1]]
         ys = [self.hashDict[item][-self.pnts:] for item in items]
 
-        color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC']
+        color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC'] * (len(items) // 4) 
 
         # init figure
         fig = plt.figure(1, figsize = (16,12))
@@ -96,7 +96,7 @@ class plotter:
         line_colors = [l.get_color() for l in lines_by_label.values()]
         self.visibility_by_label = {l.get_label(): l.get_visible() for l in lines_list}
 
-        rax = fig.add_axes([0.01, 0.4, 0.15, 0.15])
+        rax = fig.add_axes([0.01, 0.4, 0.2, 0.15])
         check = CheckButtons(
             ax=rax,
             labels=lines_by_label.keys(),
