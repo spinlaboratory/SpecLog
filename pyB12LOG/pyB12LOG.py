@@ -1,6 +1,8 @@
 """
 pyB12LOG: The logging program for instrumentations
 
+pyB12LOG: creating logging files and configurations and controlling whole logger.
+
 Author: Yen-Chun Huang
 
 Company: Bridge 12 Technologies, Inc
@@ -11,7 +13,7 @@ from .general import *
 import time
 import logging
 import os
-from .config.config import CONFIG, SEIRAL_CONFIG
+from .config.config import CONFIG, SERIAL_CONFIG
 from configparser import ConfigParser
 
 class pyB12LOG:
@@ -42,8 +44,8 @@ class pyB12LOG:
 
             # Put current available addresses and required items for serial communication to list
             items = []
-            for key in SEIRAL_CONFIG:
-                items.extend([item for item in SEIRAL_CONFIG[key].keys()])
+            for key in SERIAL_CONFIG:
+                items.extend([item for item in SERIAL_CONFIG[key].keys()])
             
             # List cannot be modified in config
             self.deviceConfig['GENERAL'] = {
@@ -54,9 +56,9 @@ class pyB12LOG:
             # initial with current device info
             for address in self.deviceAddresses:
                 self.deviceConfig[address] = {}
-                for key in SEIRAL_CONFIG:
+                for key in SERIAL_CONFIG:
                     self.deviceConfig[address] = {**self.deviceConfig[address],
-                        **{item: val for item, val in SEIRAL_CONFIG[key].items() 
+                        **{item: val for item, val in SERIAL_CONFIG[key].items() 
                     }}
                 self.deviceConfig[address]['device_address'] = "'%s'"%address
             with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
@@ -79,10 +81,10 @@ class pyB12LOG:
             for address in self.deviceAddresses:
                 if address not in self.deviceConfig.sections():
                     self.deviceConfig[address] = {}
-                    for key in SEIRAL_CONFIG:
+                    for key in SERIAL_CONFIG:
                         self.deviceConfig[address] = {
                             **self.deviceConfig[address],
-                            **{item: val for item, val in SEIRAL_CONFIG[key].items()} 
+                            **{item: val for item, val in SERIAL_CONFIG[key].items()} 
                         }
                     self.deviceConfig[address]['device_address'] = "'%s'"%address
             

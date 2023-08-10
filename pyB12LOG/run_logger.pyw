@@ -1,3 +1,7 @@
+'''
+This is the python program to run logger only 
+'''
+
 import os
 from collections import Counter
 from .pyB12LOG import *

@@ -1,3 +1,7 @@
+'''
+This is the python program to control pyB12logger 
+'''
+
 import os
 import sys
 import argparse
