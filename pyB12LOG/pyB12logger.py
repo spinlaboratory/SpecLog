@@ -8,7 +8,7 @@ from .pyB12LOG import *
 def main_func():
 
     parser = argparse.ArgumentParser(prog='pyB12logger')
-    parser.add_argument('status', type=str, nargs='?', default = 'start', choices = ['start', 'stop'],
+    parser.add_argument('status', type=str, nargs='?', default = None, choices = ['start', 'stop'],
                         help='To start/stop pyB12logger. If no argument, the pyB12logger will start by default')
     parser.add_argument('-desktop', type=str, default = False, choices = ['True', 'False'],
                         help='To create desktop icons')
@@ -17,6 +17,35 @@ def main_func():
     parser.add_argument('-debug', type=str, default = 'False', choices = ['True', 'False'],
                         help='To start debug console pyB12logger.')
     args = parser.parse_args()
+
+    if args.startup == 'True':
+        if not os.path.exists(startup_folder + '/pyB12logger_running.exe'):
+            shutil.copy(source_running_logger, startup_folder)
+            print('pyB12logger will run on startup.')
+    elif args.startup == 'False':
+        if not os.path.exists(startup_folder + '/pyB12logger_running.exe'):
+            print(startup_folder + 'pyB12logger_running.exe')
+            print('pyB12logger does not run on startup.')
+        else:
+            os.remove(startup_folder + '/pyB12logger_running.exe')
+            print('pyB12logger will not run on startup.')
+
+    if args.desktop == 'True':
+        if not os.path.exists(desktop_folder + '/pyB12logger_running.exe'):
+            shutil.copy(source_running_logger, desktop_folder)
+            print('Create pyB12logger_running.exe on the desktop.')
+        else:
+            print('pyB12logger_running.exe is on desktop already.')
+        
+        if not os.path.exists(desktop_folder + '/pyB12plotter.exe'):
+            shutil.copy(source_plotter, desktop_folder)
+            print('Create pyB12plotter_running.exe on the desktop.')
+        else:    
+                print('pyB12plotter.exe is on desktop already.')
+    
+    if not args.startup and not args.desktop: # not arguments 
+        args.status = 'start'
+
     if args.status == 'start':
         current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
         hashDict = Counter(current_exe) 
@@ -26,31 +55,6 @@ def main_func():
         desktop_folder = os.path.normpath('C:/Users/Public/Desktop/')
         source_running_logger = os.path.dirname(sys.executable) + '/scripts/pyB12logger_running.exe' 
         source_plotter = os.path.dirname(sys.executable) + '/scripts/pyB12plotter.exe' 
-
-        if args.startup == 'True':
-            if not os.path.exists(startup_folder + '/pyB12logger_running.exe'):
-                shutil.copy(source_running_logger, startup_folder)
-                print('pyB12logger will run on startup.')
-        elif args.startup == 'False':
-            if not os.path.exists(startup_folder + '/pyB12logger_running.exe'):
-                print(startup_folder + 'pyB12logger_running.exe')
-                print('pyB12logger does not run on startup.')
-            else:
-                os.remove(startup_folder + '/pyB12logger_running.exe')
-                print('pyB12logger will not run on startup.')
-
-        if args.desktop == 'True':
-            if not os.path.exists(desktop_folder + '/pyB12logger_running.exe'):
-                shutil.copy(source_running_logger, desktop_folder)
-                print('Create pyB12logger_running.exe on the desktop.')
-            else:
-                print('pyB12logger_running.exe is on desktop already.')
-            
-            if not os.path.exists(desktop_folder + '/pyB12plotter.exe'):
-                shutil.copy(source_plotter, desktop_folder)
-                print('Create pyB12plotter_running.exe on the desktop.')
-            else:    
-                print('pyB12plotter.exe is on desktop already.')
 
 
         if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_running.exe'] > 0 or 'pyB12logger_debug.exe' in hashDict and hashDict['pyB12logger_debug.exe'] > 0:
@@ -69,7 +73,7 @@ def main_func():
         os.system("taskkill /im pyB12logger_running.exe /F")
         os.system("taskkill /im pyB12logger_debug.exe /F")
         print('pyB12logger stops')
-    else:
+    else: # ignore
         return
 
 if __name__ == "__main__":
