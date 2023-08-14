@@ -1,6 +1,8 @@
 """
 pyB12LOG: The logging program for instrumentations
 
+plotter.py: plotting data in real-time or static
+
 Author: Yen-Chun Huang
 
 Company: Bridge 12 Technologies, Inc

@@ -1,6 +1,8 @@
 """
 pyB12LOG: The logging program for instrumentations
 
+general.py: connect instruments, querying data and writing to files
+
 Author: Yen-Chun Huang
 
 Company: Bridge 12 Technologies, Inc
