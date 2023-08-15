@@ -38,6 +38,7 @@ class plotter:
         self.plot()
 
     def logRead(self):
+        del self.log_list # release memory
         self.log_list = [log for log in os.listdir(self.logDir) if 'log_' in log][-1*self.number_of_file:]
         while self.current_log != self.log_list[-1]: 
             self.current_log = self.log_list[self.log_index] # update current log
@@ -203,7 +204,6 @@ class plotter:
 
                 elif self.selected_date:
                     x, x_ticks, x_label, ys = self._get_plot_values(self.dict_by_date, len(self.dict_by_date['Date']), self.items, ticks = 10)
-
                     self.static_figure = True # update figure only once
 
                 # self.f.seek(where) # (option) find current pointer
@@ -231,13 +231,17 @@ class plotter:
                 self.update_figure = False
                 self.update_visibility = False
 
+                del x_ticks
+                del x_label
+                del ys
+
             plt.pause(0.01) # showing new plot
     
         plt.show()
 
     def _hashDict_values_length_keeper(self, keys, d, checker):
         '''
-        This function is to make sure all lists in the dictionary have same lengthd
+        This function is to make sure all lists in the dictionary have same length
         Args:
             keys: a new list of dictionary key
             d: current dictionary
@@ -271,6 +275,8 @@ class plotter:
             else:
                 val = float(data[index])
             
+            if len(d[key]) > 2000:
+                del d[key][0] 
             d[key].append(val)
         return d
     
