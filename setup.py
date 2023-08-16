@@ -27,7 +27,7 @@ setuptools.setup(
         'Operating System :: Microsoft :: Windows',
     ],
     python_requires='>=3.6',
-    install_requires=['pyvisa', 'matplotlib'],
+    install_requires=['pyvisa >= 1.13.0', 'matplotlib >= 3.7.1'],
     entry_points = dict(
         gui_scripts = [
             "pyB12plotter = pyB12LOG.run_plotter:main_func",
