@@ -41,11 +41,11 @@ def main_func():
         else:
             print('pyB12logger_running.exe is on desktop already.')
         
-        if not os.path.exists(desktop_folder + '/pyB12plotter.exe'):
-            shutil.copy(source_plotter, desktop_folder)
-            print('Create pyB12plotter_running.exe on the desktop.')
+        if not os.path.exists(desktop_folder + '/pyB12monitor.exe'):
+            shutil.copy(source_monitor, desktop_folder)
+            print('Create pyB12monitor_running.exe on the desktop.')
         else:    
-                print('pyB12plotter.exe is on desktop already.')
+                print('pyB12monitor.exe is on desktop already.')
     
     if not args.startup and not args.desktop and not args.status: # not arguments 
         args.status = 'start'
@@ -58,7 +58,7 @@ def main_func():
         startup_folder = os.path.normpath('C:/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp/')
         desktop_folder = os.path.normpath('C:/Users/Public/Desktop/')
         source_running_logger = os.path.dirname(sys.executable) + '/scripts/pyB12logger_running.exe' 
-        source_plotter = os.path.dirname(sys.executable) + '/scripts/pyB12plotter.exe' 
+        source_monitor = os.path.dirname(sys.executable) + '/scripts/pyB12monitor.exe' 
 
 
         if 'pyB12logger_running.exe' in hashDict and hashDict['pyB12logger_running.exe'] > 0 or 'pyB12logger_debug.exe' in hashDict and hashDict['pyB12logger_debug.exe'] > 0:

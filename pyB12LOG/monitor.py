@@ -1,7 +1,7 @@
 """
 pyB12LOG: The logging program for instrumentations
 
-plotter.py: plotting data in real-time or static
+monitor.py: plotting data in real-time or static
 
 Author: Yen-Chun Huang
 
@@ -14,7 +14,7 @@ import csv
 from matplotlib.widgets import Button, RadioButtons, CheckButtons, Slider, TextBox
 from .config.config import CONFIG
 
-class plotter:
+class monitor:
     def __init__(self, number_of_file = 10):
         deviceConfigDirHome = CONFIG['CONFIG']['log_folder_location'][1:-1]
         self.logDir = deviceConfigDirHome + '/B12TLOG/'
@@ -225,9 +225,9 @@ class plotter:
                 if self.selected_file:
                     ax.set_title(self.current_selected_file)
                 elif self.selected_date:
-                    ax.set_title('pyB12plotter\n%s - %s' %(self.dict_by_date['Date'][0] + ' ' + self.dict_by_date['Time'][0], self.dict_by_date['Date'][-1] + ' ' + self.dict_by_date['Time'][-1]))
+                    ax.set_title('pyB12monitor\n%s - %s' %(self.dict_by_date['Date'][0] + ' ' + self.dict_by_date['Time'][0], self.dict_by_date['Date'][-1] + ' ' + self.dict_by_date['Time'][-1]))
                 else:
-                    ax.set_title('pyB12plotter')
+                    ax.set_title('pyB12monitor')
 
                 self.update_figure = False
                 self.update_visibility = False
@@ -269,9 +269,9 @@ class plotter:
             d: the appended dictionary
 
         '''
-        td = {key: val for key, val in zip(items, data)}
-        for index, key in enumerate(d.keys()):
-            if key == 'Data' or key == 'Time':
+        td = {key.strip(): val.strip() for key, val in zip(items, data)}
+        for key in d.keys():
+            if key == 'Date' or key == 'Time':
                 val = td[key].strip()
             elif key in td:
                 val = float(td[key])
