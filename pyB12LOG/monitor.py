@@ -12,13 +12,22 @@ import os
 import numpy as _np
 import matplotlib.pyplot as plt
 import csv
+from collections import Counter
 from matplotlib.widgets import Button, RadioButtons, CheckButtons, Slider, TextBox
 from .config.config import CONFIG
+from configparser import ConfigParser
 
 class monitor:
     def __init__(self, number_of_file = 10):
         deviceConfigDirHome = CONFIG['CONFIG']['log_folder_location'][1:-1]
         self.logDir = deviceConfigDirHome + '/B12TLOG/'
+
+        self.deviceConfigDirFile = deviceConfigDirHome +'/B12TLOG_Config/device_config.cfg'
+        self.deviceConfig = ConfigParser()
+
+        self.commandConfigFile = deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
+        self.commandConfig = ConfigParser()
+
         self.header = None
         self.hashDict = {}
         self.log_list = os.listdir(self.logDir)
@@ -33,6 +42,8 @@ class monitor:
         self.current_selected_file = None
         self.number_of_file = number_of_file
 
+        self.last_device_dict = {}
+        self._update_status()
         self.logRead()
         self.max_pnts = len(self.hashDict['Date'])
         self.plot()
@@ -82,7 +93,7 @@ class monitor:
         ax.grid(ls = ':')
         ax.set_xlabel('Time')
 
-        # check buttons
+        # check buttons for showing curves
         rax = fig.add_axes([0.01, 0.4, 0.2, 0.15])
         check = CheckButtons(
             ax=rax,
@@ -104,6 +115,39 @@ class monitor:
                 fig.canvas.draw_idle()
 
         check.on_clicked(callback)
+
+        # check buttons for showing status of devices
+        rax_device = fig.add_axes([0.01, 0.8, 0.2, 0.15])
+        check_device = CheckButtons(
+            ax = rax_device,
+            labels= list(self.current_device_dict.keys()),
+            actives = list(self.current_device_dict.values()),
+            # label_props={'color': line_colors},
+            # frame_props={'edgecolor': line_colors},
+            # check_props={'facecolor': line_colors},
+        )
+
+        def callback_device(label):
+            self.current_device_dict[label] = not self.current_device_dict[label]
+            if label != 'Logger':
+                address = self.address_dict[label]
+                self.deviceConfig[address]['device_status'] = str(self.current_device_dict[label])
+            elif label == 'Logger':
+                current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
+                hashDict = Counter(current_exe)
+                if 'pyB12logger_running.exe' not in hashDict and 'pyB12logger_debug.exe' not in hashDict and self.current_device_dict[label] == True:
+                    os.startfile('pyB12logger_running.exe')
+                    print('pyB12logger starts')
+                elif 'pyB12logger_running.exe' in hashDict or 'pyB12logger_debug.exe' in hashDict and self.current_device_dict[label] == False:
+                    os.system("taskkill /im pyB12logger_running.exe /F")
+                    os.system("taskkill /im pyB12logger_debug.exe /F")
+                    print('pyB12logger stops')
+            
+            with open(self.deviceConfigDirFile, 'w') as conf: ## Change configuration file
+                self.deviceConfig.write(conf)
+
+        check_device.on_clicked(callback_device)
+
 
         # slider bar and reset for zooming
         self.slider_pnts = int(self.max_pnts / 2)
@@ -168,7 +212,7 @@ class monitor:
         reset_button.on_clicked(reset)
 
         while(plt.fignum_exists(1)):
-
+            self._update_status()
             self.logRead() # check if new log creates
             # where = self.f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
@@ -356,14 +400,25 @@ class monitor:
                 dict_by_date = self._hashDict_append(keys, data, dict_by_date, memory_reduce = False) # O(n)
         return dict_by_date
 
-        
-            
-            
+    def _update_status(self):
+        '''
+        Check logger status and device status
+        '''
+        current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
+        self.current_device_dict = {'Logger' : True if 'pyB12logger_running.exe' in current_exe or 'pyB12logger_debug.exe' in current_exe else False}
+        self.address_dict = {}
+        self.deviceConfig.read(self.deviceConfigDirFile)
+        self.commandConfig.read(self.commandConfigFile)
+        addresses = self.deviceConfig['GENERAL']['device_addresses'].replace(' ', '').split(',')
+        for address in addresses:
+            model_number = self.deviceConfig[address]['model_number'].replace("'", '')
+            if model_number in self.commandConfig.keys():
+                self.current_device_dict[model_number] = eval(self.deviceConfig[address]['device_status'].strip())
+                self.address_dict[model_number] = address
+                
+        if self.current_device_dict != self.last_device_dict: # some updates occur
+            self.last_device_dict = self.current_device_dict.copy()
 
-
-            
-            
-            
 
 
         
