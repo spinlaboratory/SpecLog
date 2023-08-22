@@ -40,5 +40,4 @@ setuptools.setup(
         ],
     ),
     package_data={"pyB12LOG": ["config/command.cfg", "config/config.cfg", "config/serial.cfg"]},
-    data_files = [('share/application', ['config.cfg'])],
 )
