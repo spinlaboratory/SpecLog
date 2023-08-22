@@ -26,7 +26,7 @@ setuptools.setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: Microsoft :: Windows',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.10',
     install_requires=['pyvisa >= 1.13.0', 'matplotlib >= 3.7.1', 'numpy >= 1.24.3'],
     entry_points = dict(
         gui_scripts = [
