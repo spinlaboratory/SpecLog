@@ -10,6 +10,8 @@ Company: Bridge 12 Technologies, Inc
 
 import os
 import numpy as _np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import csv
 from collections import Counter
@@ -77,6 +79,7 @@ class monitor:
         color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC'] * (len(self.items) // 4 + 1) 
 
         # init figure
+        plt.ion()
         fig = plt.figure(1, figsize = (16,12))
         plt.subplots_adjust(left=0.25, bottom = 0.25)
         ax = fig.add_subplot(1,1,1)
@@ -151,7 +154,6 @@ class monitor:
 
         check_device.on_clicked(callback_device)
 
-
         # slider bar and reset for zooming
         self.slider_pnts = int(self.max_pnts / 2)
         slider_ax = fig.add_axes([0.25, 0.15, 0.65, 0.03], facecolor = '#F37021')
@@ -213,6 +215,8 @@ class monitor:
             self.selected_file = False
             self.selected_date = False
         reset_button.on_clicked(reset)
+
+        fig.show() # inital plotting
 
         while(plt.fignum_exists(1)):
             self._update_status()
@@ -283,9 +287,7 @@ class monitor:
                 del x_label
                 del ys
 
-            plt.pause(0.01) # showing new plot
-    
-        plt.show()
+            fig.canvas.flush_events() # showing new plot by flushing event
 
     def _hashDict_values_length_keeper(self, keys, d, checker):
         '''
