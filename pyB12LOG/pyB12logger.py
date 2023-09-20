@@ -69,14 +69,14 @@ def main_func():
         else:
             if args.debug == 'False':          
                 subprocess.Popen('pyB12logger_running.exe', creationflags = subprocess.CREATE_NO_WINDOW)
-                print('pyB12logger starts')
+                print('pyB12logger started')
             elif args.debug == 'True': 
                 os.startfile('pyB12logger_running.exe')
-                print('pyB12logger debug mode starts')
+                print('pyB12logger debug mode started')
     
     elif args.status == 'stop':
         os.system("taskkill /im pyB12logger_running.exe /F")
-        print('pyB12logger stops')
+        print('pyB12logger stopped')
     else: # ignore
         return
 

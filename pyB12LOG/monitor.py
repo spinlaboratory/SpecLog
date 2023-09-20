@@ -144,10 +144,10 @@ class monitor:
                 hashDict = Counter(current_exe)
                 if 'pyB12logger_running.exe' not in hashDict and self.current_device_dict[label] == True:
                     subprocess.Popen('pyB12logger_running.exe', creationflags = subprocess.CREATE_NO_WINDOW)
-                    print('pyB12logger starts')
+                    print('pyB12logger started')
                 elif 'pyB12logger_running.exe' in hashDict and self.current_device_dict[label] == False:
                     os.system("taskkill /im pyB12logger_running.exe /F")
-                    print('pyB12logger stops')
+                    print('pyB12logger stopped')
             
             with open(self.deviceConfigDirFile, 'w') as conf: ## Change configuration file
                 self.deviceConfig.write(conf)
@@ -220,6 +220,7 @@ class monitor:
 
         while(plt.fignum_exists(1)):
             self._update_status()
+            self._update_check_button(check_device)
             self.logRead() # check if new log creates
             # where = self.f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
@@ -410,7 +411,7 @@ class monitor:
         Check logger status and device status
         '''
         current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
-        self.current_device_dict = {'Logger' : True if 'pyB12logger_running.exe' in current_exe or 'pyB12logger_debug.exe' in current_exe else False}
+        self.current_device_dict = {'Logger' : True if 'pyB12logger_running.exe' in current_exe else False}
         self.address_dict = {}
         self.deviceConfig.read(self.deviceConfigDirFile)
         self.commandConfig.read(self.commandConfigFile)
@@ -424,6 +425,16 @@ class monitor:
         if self.current_device_dict != self.last_device_dict: # some updates occur
             self.last_device_dict = self.current_device_dict.copy()
 
+    def _update_check_button(self, check: matplotlib.widgets.CheckButtons):
+        '''
+        Logic status check on the logger and devices and set status to check buttons
+        '''
+        check.eventson = False
+        status = check.get_status()
+        for i, (check_status, device_status) in enumerate(zip(status, self.current_device_dict.values())):
+            if (check_status != device_status):
+                check.set_active(i)
+        check.eventson = True
 
 
         

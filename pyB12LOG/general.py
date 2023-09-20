@@ -91,7 +91,7 @@ class DEVICE:
                 self.activeAddresses.remove(address) 
 
         if self.errorFlag: # this will force whole program restart in logger.py
-            raise ConnectionError('Connection Restarts')
+            raise ConnectionError('Connection Restarted')
 
     def log(self):
         self._update_connect()
