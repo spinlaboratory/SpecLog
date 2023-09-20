@@ -9,6 +9,7 @@ Company: Bridge 12 Technologies, Inc
 """
 
 import os
+import subprocess
 import numpy as _np
 import matplotlib
 matplotlib.use('TkAgg')
@@ -141,12 +142,11 @@ class monitor:
             elif label == 'Logger':
                 current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
                 hashDict = Counter(current_exe)
-                if 'pyB12logger_running.exe' not in hashDict and 'pyB12logger_debug.exe' not in hashDict and self.current_device_dict[label] == True:
-                    os.startfile('pyB12logger_running.exe')
+                if 'pyB12logger_running.exe' not in hashDict and self.current_device_dict[label] == True:
+                    subprocess.Popen('pyB12logger_running.exe', creationflags = subprocess.CREATE_NO_WINDOW)
                     print('pyB12logger starts')
-                elif 'pyB12logger_running.exe' in hashDict or 'pyB12logger_debug.exe' in hashDict and self.current_device_dict[label] == False:
+                elif 'pyB12logger_running.exe' in hashDict and self.current_device_dict[label] == False:
                     os.system("taskkill /im pyB12logger_running.exe /F")
-                    os.system("taskkill /im pyB12logger_debug.exe /F")
                     print('pyB12logger stops')
             
             with open(self.deviceConfigDirFile, 'w') as conf: ## Change configuration file
