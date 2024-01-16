@@ -31,6 +31,14 @@ class monitor:
         self.commandConfigFile = deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
         self.commandConfig = ConfigParser()
 
+        if 'alias.cfg' in os.listdir(deviceConfigDirHome +'/B12TLOG_Config/'):
+            self.alias_availability = True
+            self.aliasFile = deviceConfigDirHome +'/B12TLOG_Config/alias.cfg'
+            self.alias = ConfigParser()
+            self.alias.read(self.aliasFile)
+        else:
+            self.alias_availability = False
+
         self.header = None
         self.hashDict = {}
         self.log_list = os.listdir(self.logDir)
@@ -66,8 +74,8 @@ class monitor:
                 self.hashDict = self._hashDict_append(self.keys, data, self.hashDict) 
             self.log_index += 1
 
-        self.items = list(self.hashDict.keys())[2:] # get all headers/items
-    
+            self.items = list(self.hashDict.keys())[2:] # get all headers/items
+        
     def plot(self):
         self.time_length = len(self.hashDict['Time'])
         if self.time_length < self.max_pnts: 
@@ -90,8 +98,13 @@ class monitor:
         self.update_require = 0
 
         # initial plotting
+        if self.alias_availability:
+            self.labels = [self.alias['ALIAS'][key] for key in self.items]
+        else:
+            self.labels = self.items
+
         for index, (y, color) in enumerate(zip(ys, color_lists)):
-            l, = ax.plot(x, y, color, label = self.items[index])
+            l, = ax.plot(x, y, color, label = self.labels[index])
             self.lines_by_label[l.get_label()] = l
             line_colors.append(color)
             self.visibility_by_label[l.get_label()] = l.get_visible() 
@@ -263,7 +276,7 @@ class monitor:
                 del self.lines_by_label # release memory
                 self.lines_by_label = {}
                 for index, (y, color) in enumerate(zip(ys, color_lists)):
-                    label = self.items[index]
+                    label = self.labels[index]
                     if self.visibility_by_label[label]:
                         l, = ax.plot(x, y, color, label = label)
                     else:
