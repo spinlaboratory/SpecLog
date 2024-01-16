@@ -30,10 +30,10 @@ class DEVICE:
         self.commandConfig = ConfigParser()
         self._update_command() 
 
-        self.aliasFile = self.deviceConfigDirHome +'/B12TLOG_Config/alias.cfg'
-        self._create_alias()
-        self.alias= ConfigParser()
-        self._update_alias()
+        self.detailFile = self.deviceConfigDirHome +'/B12TLOG_Config/device_detail.cfg'
+        self._create_detail()
+        self.detail= ConfigParser()
+        self._update_detail()
         self.logDir = self.deviceConfigDirHome + '/B12TLOG'
 
         self.debugLogger= debugLogger
@@ -101,40 +101,41 @@ class DEVICE:
     def _update_command(self):
         self.commandConfig.read(self.commandConfigFile)
     
-    def _create_alias(self):
-        # if alias file is not existing, generate new file
-        if 'alias.cfg' not in os.listdir(self.deviceConfigDirHome +'/B12TLOG_Config/'):
-            alias = open(self.aliasFile, 'a')
-            alias.write('[ALIAS]')
-            alias.close()
+    def _create_detail(self):
+        # if detail file is not existing, generate new file
+        if 'device_detail.cfg' not in os.listdir(self.deviceConfigDirHome +'/B12TLOG_Config/'):
+            detail = open(self.detailFile, 'a')
+            detail.write('[ALIAS]')
+            detail.close()
             
-        # check alias file is valid: first line must be [ALIAS]
-        with open(self.aliasFile, 'r') as alias:
-            first_line = alias.readline().strip('\n')
+        # check detail file is valid: first line must be [ALIAS]
+        with open(self.detailFile, 'r') as detail:
+            first_line = detail.readline().strip('\n')
 
         if first_line != "[ALIAS]": 
             # backup the comprise file and create a new one
-            os.rename(self.aliasFile, self.deviceConfigDirHome +'/B12TLOG_Config/alias_compromised.cfg') 
-            self._create_alias() # repeat the function itself
-            self.debugLogger.info('Alias file is compromised. New file is created')
+            os.rename(self.detailFile, self.deviceConfigDirHome +'/B12TLOG_Config/device_detail_compromised.cfg') 
+            self._create_detail() # repeat the function itself
+            self.debugLogger.info('Detail file is compromised. New file is created')
 
-    def _update_alias(self):
-        # update the alias along with the command config file
-        self.alias.read(self.aliasFile)
+    def _update_detail(self):
+        # update the detail along with the command config file
+        self.detail.read(self.detailFile)
         for value in self.commandConfig.values():
             for key in value.keys():
-                if key not in self.alias['ALIAS']:
-                    self.alias['ALIAS'][key] = key
-                    update_alias = True
-
-        if update_alias: # write to file only when the command changes while logger is running
-            with open(self.aliasFile, 'w') as conf:
-                self.alias.write(conf)
+                if key not in self.detail['ALIAS']:
+                    self.detail['ALIAS'][key] = key
+                    update_detail = True
+                else:
+                    update_detail = False
+        if update_detail: # write to file only when the command changes while logger is running
+            with open(self.detailFile, 'w') as conf:
+                self.detail.write(conf)
 
     def log(self):
         self._update_connect()
         self._update_command()
-        self._update_alias()
+        self._update_detail()
         if self.newFile:
             for address in self.activeAddresses:
                 model_number = self.deviceConfig[address]['model_number'].replace("'", '')

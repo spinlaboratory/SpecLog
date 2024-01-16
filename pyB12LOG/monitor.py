@@ -31,13 +31,13 @@ class monitor:
         self.commandConfigFile = deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
         self.commandConfig = ConfigParser()
 
-        if 'alias.cfg' in os.listdir(deviceConfigDirHome +'/B12TLOG_Config/'):
-            self.alias_availability = True
-            self.aliasFile = deviceConfigDirHome +'/B12TLOG_Config/alias.cfg'
-            self.alias = ConfigParser()
-            self.alias.read(self.aliasFile)
+        if 'device_detail.cfg' in os.listdir(deviceConfigDirHome +'/B12TLOG_Config/'):
+            self.detail_availability = True
+            self.detailFile = deviceConfigDirHome +'/B12TLOG_Config/device_detail.cfg'
+            self.detail = ConfigParser()
+            self.detail.read(self.detailFile)
         else:
-            self.alias_availability = False
+            self.detail_availability = False
 
         self.header = None
         self.hashDict = {}
@@ -98,8 +98,8 @@ class monitor:
         self.update_require = 0
 
         # initial plotting
-        if self.alias_availability:
-            self.labels = [self.alias['ALIAS'][key] for key in self.items]
+        if self.detail_availability:
+            self.labels = [self.detail['ALIAS'][key] for key in self.items]
         else:
             self.labels = self.items
 
