@@ -20,30 +20,27 @@ rm = pyvisa.ResourceManager()
 class DEVICE:
     def __init__(self, debugLogger):
 
-        deviceConfigDirHome = CONFIG['CONFIG']['log_folder_location'][1:-1]
+        self.deviceConfigDirHome = CONFIG['CONFIG']['log_folder_location'][1:-1]
         self.fileSize = int(CONFIG['CONFIG']['save_file_size_kb']) * 1024
 
-        self.deviceConfigDirFile = deviceConfigDirHome +'/B12TLOG_Config/device_config.cfg'
+        self.deviceConfigDirFile = self.deviceConfigDirHome +'/B12TLOG_Config/device_config.cfg'
         self.deviceConfig = ConfigParser()
 
-        self.commandConfigFile = deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
-        self.commandConfig = ConfigParser() 
+        self.commandConfigFile = self.deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
+        self.commandConfig = ConfigParser()
+        self._update_command() 
 
-        self.logDir = deviceConfigDirHome + '/B12TLOG'
+        self.aliasFile = self.deviceConfigDirHome +'/B12TLOG_Config/alias.cfg'
+        self._create_alias()
+        self.alias= ConfigParser()
+        self._update_alias()
+        self.logDir = self.deviceConfigDirHome + '/B12TLOG'
 
         self.debugLogger= debugLogger
         self.activeDevices = []
         self.activeAddresses = []
         self.queryItems = []
         self.newFile = 1
-    
-    # def _alise_checker(self):
-    #     listDir = os.listdir(self.deviceConfigDir)
-        
-    #     # create alise file if not exists
-    #     if 'alise.cfg' not in listDir:
-    #         items = []
-    #         for key in 
 
     def _update_connect(self):
         self.deviceConfig.read(self.deviceConfigDirFile)
@@ -101,9 +98,43 @@ class DEVICE:
         if self.errorFlag: # this will force whole program restart in logger.py
             raise ConnectionError('Connection Restarted')
 
+    def _update_command(self):
+        self.commandConfig.read(self.commandConfigFile)
+    
+    def _create_alias(self):
+        # if alias file is not existing, generate new file
+        if 'alias.cfg' not in os.listdir(self.deviceConfigDirHome +'/B12TLOG_Config/'):
+            alias = open(self.aliasFile, 'a')
+            alias.write('[ALIAS]')
+            alias.close()
+            
+        # check alias file is valid: first line must be [ALIAS]
+        with open(self.aliasFile, 'r') as alias:
+            first_line = alias.readline().strip('\n')
+
+        if first_line != "[ALIAS]": 
+            # backup the comprise file and create a new one
+            os.rename(self.aliasFile, self.deviceConfigDirHome +'/B12TLOG_Config/alias_compromised.cfg') 
+            self._create_alias() # repeat the function itself
+            self.debugLogger.info('Alias file is compromised. New file is created')
+
+    def _update_alias(self):
+        # update the alias along with the command config file
+        self.alias.read(self.aliasFile)
+        for value in self.commandConfig.values():
+            for key in value.keys():
+                if key not in self.alias['ALIAS']:
+                    self.alias['ALIAS'][key] = key
+                    update_alias = True
+
+        if update_alias: # write to file only when the command changes while logger is running
+            with open(self.aliasFile, 'w') as conf:
+                self.alias.write(conf)
+
     def log(self):
         self._update_connect()
-        self.commandConfig.read(self.commandConfigFile)
+        self._update_command()
+        self._update_alias()
         if self.newFile:
             for address in self.activeAddresses:
                 model_number = self.deviceConfig[address]['model_number'].replace("'", '')
