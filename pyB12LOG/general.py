@@ -32,7 +32,7 @@ class DEVICE:
         self._update_command() 
 
         self.detailFile = self.deviceConfigDirHome +'/B12TLOG_Config/device_detail.cfg'
-        self.detail= ConfigParser()
+        self.detail= ConfigParser(allow_no_value = True)
         self._create_detail()
         self._update_detail()
         self.logDir = self.deviceConfigDirHome + '/B12TLOG'
@@ -120,23 +120,31 @@ class DEVICE:
         if not detail_valid: 
             # backup the comprise file and create a new one
             os.rename(self.detailFile, self.deviceConfigDirHome +'/B12TLOG_Config/device_detail_compromised.cfg')
-            self.detail= ConfigParser() # refresh the detail variable
+            self.detail= ConfigParser(allow_no_value = True) # refresh the detail variable
             self._create_detail() # repeat the function itself
             self.debugLogger.info('Detail file is compromised. New file is created')
 
     def _update_detail(self):
         # update the detail along with the command config file
         self.detail.read(self.detailFile)
+        save_detail = False
         for value in self.commandConfig.values():
             for key in value.keys():
-                print(key, list(self.detail['ALIAS']))
                 if key not in self.detail['ALIAS']:
                     self.detail['ALIAS'][key] = key
-                    update_detail = True
-                else:
-                    update_detail = False
-        
-        if update_detail: # write to file only when the command changes while logger is running
+                    save_detail = True                   
+                
+                value_kws = ['_min', '_max', '_static']
+                for kw in value_kws:
+                    if key + kw not in self.detail['VALUE']:
+                        self.detail['VALUE'][key + kw] = None
+                        save_detail = True
+
+                if key not in self.detail['VISIBILITY']:
+                    self.detail['VISIBILITY'][key] = 'True'
+                    save_detail = True
+
+        if save_detail: # write to file only when the command changes while logger is running
             with open(self.detailFile, 'w') as conf:
                 self.detail.write(conf)
 
