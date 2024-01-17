@@ -39,7 +39,7 @@ class monitor:
         self.current_log = None
         self.update_figure = True
         self.static_figure = False
-        self.update_visibility = False
+        # self.update_visibility = False
         self.selected_file = False
         self.selected_date = False
         self.current_selected_file = None
@@ -77,7 +77,7 @@ class monitor:
         
         x, x_ticks, x_label, ys = self._get_plot_values(self.hashDict, self.pnts, self.items)
 
-        color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC'] * (len(self.items) // 4 + 1) 
+        self.color_lists = ['#F37021', '#46812B', '#4D4D4F', '#A7A9AC'] * (len(self.items) // 4 + 1) 
 
         # init figure
         plt.ion()
@@ -87,13 +87,15 @@ class monitor:
         self.visibility_by_label = {}
         self.lines_by_label = {}
         line_colors = []
+        self.line_weight = {}
         self.update_require = 0
 
         # initial plotting
-        for index, (y, color) in enumerate(zip(ys, color_lists)):
+        for index, (y, color) in enumerate(zip(ys, self.color_lists)):
             l, = ax.plot(x, y, color, label = self.items[index])
             self.lines_by_label[l.get_label()] = l
             line_colors.append(color)
+            self.line_weight[l.get_label()] = 'bold'
             self.visibility_by_label[l.get_label()] = l.get_visible() 
         ax.set_xticks(x_ticks)
         ax.set_xticklabels(x_label)
@@ -106,14 +108,15 @@ class monitor:
             ax=rax,
             labels=self.lines_by_label.keys(),
             actives=[l.get_visible() for l in self.lines_by_label.values()],
-            label_props={'color': line_colors},
+            label_props={'color': line_colors, 'fontweight': list(self.line_weight.values())},
             frame_props={'edgecolor': line_colors},
             check_props={'facecolor': line_colors},
         )
         
         def callback(label):
             self.visibility_by_label[label] = not self.visibility_by_label[label]
-            self.update_visibility = True
+            self.line_weight[label] = 'light' if self.visibility_by_label[label] == False else 'bold'
+            # self.update_visibility = True
             self.update_figure = True
 
             if self.static_figure == True:
@@ -217,10 +220,11 @@ class monitor:
         reset_button.on_clicked(reset)
 
         fig.show() # inital plotting
-
         while(plt.fignum_exists(1)):
             self._update_status()
-            self._update_check_button(check_device)
+            self._update_device_check_button(check_device)
+            # print({'fontweight': list(self.line_weight.values())})
+            check.set_label_props({'fontweight': list(self.line_weight.values())})
             self.logRead() # check if new log creates
             # where = self.f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
@@ -262,7 +266,7 @@ class monitor:
                 ax.clear() # clean figure
                 del self.lines_by_label # release memory
                 self.lines_by_label = {}
-                for index, (y, color) in enumerate(zip(ys, color_lists)):
+                for index, (y, color) in enumerate(zip(ys, self.color_lists)):
                     label = self.items[index]
                     if self.visibility_by_label[label]:
                         l, = ax.plot(x, y, color, label = label)
@@ -282,7 +286,7 @@ class monitor:
                     ax.set_title('pyB12monitor')
 
                 self.update_figure = False
-                self.update_visibility = False
+                # self.update_visibility = False
 
                 del x_ticks
                 del x_label
@@ -428,17 +432,18 @@ class monitor:
         if self.current_device_dict != self.last_device_dict: # some updates occur
             self.last_device_dict = self.current_device_dict.copy()
 
-    def _update_check_button(self, check: matplotlib.widgets.CheckButtons):
+    def _update_device_check_button(self, check: matplotlib.widgets.CheckButtons):
         '''
         Logic status check on the logger and devices and set status to check buttons
         '''
+
         check.eventson = False
         status = check.get_status()
         for i, (check_status, device_status) in enumerate(zip(status, self.current_device_dict.values())):
             if (check_status != device_status):
-                check.set_active(i)
-        check.eventson = True
+                check.set_active(i) # Toggle       
 
+        check.eventson = True
 
         
 
