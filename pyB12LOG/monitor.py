@@ -31,6 +31,14 @@ class monitor:
         self.commandConfigFile = deviceConfigDirHome +'/B12TLOG_Config/command.cfg'
         self.commandConfig = ConfigParser()
 
+        if 'device_detail.cfg' in os.listdir(deviceConfigDirHome +'/B12TLOG_Config/'):
+            self.detail_availability = True
+            self.detailFile = deviceConfigDirHome +'/B12TLOG_Config/device_detail.cfg'
+            self.detail = ConfigParser()
+            self.detail.read(self.detailFile)
+        else:
+            self.detail_availability = False
+
         self.header = None
         self.hashDict = {}
         self.log_list = os.listdir(self.logDir)
@@ -66,8 +74,8 @@ class monitor:
                 self.hashDict = self._hashDict_append(self.keys, data, self.hashDict) 
             self.log_index += 1
 
-        self.items = list(self.hashDict.keys())[2:] # get all headers/items
-    
+            self.items = list(self.hashDict.keys())[2:] # get all headers/items
+        
     def plot(self):
         self.time_length = len(self.hashDict['Time'])
         if self.time_length < self.max_pnts: 
@@ -91,8 +99,13 @@ class monitor:
         self.update_require = 0
 
         # initial plotting
-        for index, (y, color) in enumerate(zip(ys, self.color_lists)):
-            l, = ax.plot(x, y, color, label = self.items[index])
+        if self.detail_availability:
+            self.labels = [self.detail['ALIAS'][key] for key in self.items]
+        else:
+            self.labels = self.items
+
+        for index, (y, color) in enumerate(zip(ys, color_lists)):
+            l, = ax.plot(x, y, color, label = self.labels[index])
             self.lines_by_label[l.get_label()] = l
             line_colors.append(color)
             self.line_weight[l.get_label()] = 'bold'
@@ -266,7 +279,7 @@ class monitor:
                 ax.clear() # clean figure
                 del self.lines_by_label # release memory
                 self.lines_by_label = {}
-                for index, (y, color) in enumerate(zip(ys, self.color_lists)):
+                for index, (y, color) in enumerate(zip(ys, color_lists)):
                     label = self.items[index]
                     if self.visibility_by_label[label]:
                         l, = ax.plot(x, y, color, label = label)
