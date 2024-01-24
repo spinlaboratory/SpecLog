@@ -34,7 +34,7 @@ class monitor:
         if 'device_detail.cfg' in os.listdir(deviceConfigDirHome +'/B12TLOG_Config/'):
             self.detail_availability = True
             self.detailFile = deviceConfigDirHome +'/B12TLOG_Config/device_detail.cfg'
-            self.detail = ConfigParser()
+            self.detail = ConfigParser(allow_no_value = True)
             self.detail.read(self.detailFile)
         else:
             self.detail_availability = False
@@ -99,13 +99,10 @@ class monitor:
         self.update_require = 0
 
         # initial plotting
-        if self.detail_availability:
-            self.labels = [self.detail['ALIAS'][key] for key in self.items]
-        else:
-            self.labels = self.items
-
-        for index, (y, color) in enumerate(zip(ys, color_lists)):
-            l, = ax.plot(x, y, color, label = self.labels[index])
+        self._get_label_by_item()
+        self._get_visibility_by_item()
+        for index, (y, color, item) in enumerate(zip(ys, color_lists, self.items)):
+            l, = ax.plot(x, y, color, label = self.labels[item], visible = self.visible[item])
             self.lines_by_label[l.get_label()] = l
             line_colors.append(color)
             self.line_weight[l.get_label()] = 'bold'
@@ -130,6 +127,10 @@ class monitor:
             self.visibility_by_label[label] = not self.visibility_by_label[label]
             self.line_weight[label] = 'light' if self.visibility_by_label[label] == False else 'bold'
             # self.update_visibility = True
+            item = list(self.labels.keys())[list(self.labels.values()).index(label)] # get item from label for saving visibility to the detail file
+            self.visible[item] = not self.visible[item] # update the visible dictionary
+            self._save_visibility_by_item(item, self.visible[item])
+            self.update_visibility = True
             self.update_figure = True
 
             if self.static_figure == True:
@@ -280,7 +281,7 @@ class monitor:
                 del self.lines_by_label # release memory
                 self.lines_by_label = {}
                 for index, (y, color) in enumerate(zip(ys, color_lists)):
-                    label = self.items[index]
+                    label = self.labels[index]
                     if self.visibility_by_label[label]:
                         l, = ax.plot(x, y, color, label = label)
                     else:
@@ -458,6 +459,13 @@ class monitor:
 
         check.eventson = True
 
+
+        
+
+
+
+
+        
         
 
 
