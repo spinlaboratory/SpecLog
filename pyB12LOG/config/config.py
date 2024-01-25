@@ -90,6 +90,4 @@ def _get_log_config(configname, key = None):
 
     return config
 
-COMMAND = _get_log_config("command.cfg", key = 'public')
 CONFIG = _get_log_config("config.cfg", key = 'public')
-SERIAL_CONFIG = _get_log_config("serial.cfg", key = 'global')
