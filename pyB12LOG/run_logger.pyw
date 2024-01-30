@@ -31,15 +31,8 @@ def main_func(config_file = None):
                 log.log()
             except Exception as err:
                 debugLogger.warning('logging failed')
-                debugLogger.error(traceback.format_exc())
-                try:
-                    debugLogger.info('try to re-initialize pyB12LOG')
-                    log = pyB12LOG()
-                    debugLogger.info('pyB12LOG re-initialization succeed')
-                except Exception as err:
-                    debugLogger.warning('pyB12LOG re-initialization failed')
-                    debugLogger.critical(traceback.format_exc())
-                    return 
+                debugLogger.critical(traceback.format_exc())                    
+                return 
                 
 if __name__ == "__main__":
     main_func()

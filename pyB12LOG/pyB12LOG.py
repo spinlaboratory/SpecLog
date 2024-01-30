@@ -48,7 +48,7 @@ class pyB12LOG:
 
         now = time.time()
         if not self.last_query_time or now - self.last_query_time > self.delay:
-
+            
             devices_info = self.devices.devices_info # dictionary: {model: {status, config_status, device, id_command}}
             for name, info in self.commands.items():
                 delimiter = self.device_config[name]['delimiter']
@@ -64,7 +64,8 @@ class pyB12LOG:
                         data = 'nan' # write nan to not available data
 
                     self.data_by_variable[variable] = data
-            
+                    self._setTimeInDataDictByVariable() # update time
+
             self.last_query_time = now
             
             if self._checkFileSize(): # exceed the maximum file size
@@ -163,6 +164,17 @@ class pyB12LOG:
         data = string.split(delimiter)[index]
 
         return data
+    
+    def _setTimeInDataDictByVariable(self):
+        '''
+        Update the time in data dictionary by variable
+        '''
+
+        self.data_by_variable['Date'] = str(datetime.date.today())
+        self.data_by_variable['Time'] = str(datetime.datetime.now().strftime("%H:%M:%S"))
+
+        return True
+
 
 if __name__ == '__main__':
     pyB12LOG()

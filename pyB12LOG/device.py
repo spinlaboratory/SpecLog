@@ -51,7 +51,7 @@ class DEVICE:
             {connection_status (bool): the status of device communication
             device (pyVISA): the devices class for sending command
         '''
-        status = setting['status']
+        status = setting['device_status']
         address = setting['address']
         baud_rate = setting['baud_rate']
         termination = setting['termination']

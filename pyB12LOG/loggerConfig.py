@@ -17,7 +17,7 @@ import os
 from .config.config import CONFIG # this will automatically duplicate the config file to default folder
 from configparser import ConfigParser
 
-device_default = {  'status': False,
+device_default = {  'device_status': False,
                     'address': None,
                     'id_command': '*IDN?',
                     'baud_rate': 9600,
@@ -81,8 +81,11 @@ class loggerConfig:
                 temp_dict = {} # new dictionary for devices
                 for key in device_default.keys():
                     if key in self.config[section].keys():
-                        if key in ['status', 'baud_rate', 'flow_control', 'parity', 'stop_bits']:
+                        if key in ['device_status', 'baud_rate', 'flow_control', 'parity', 'stop_bits', 'data_bits', 'index']:
                             temp_dict[key] = eval(self.config[section][key])
+                        elif key == 'termination':
+                            termination = self._getTermination(self.config[section][key])
+                            temp_dict[key] = termination                       
                         else:
                             temp_dict[key] = self.config[section][key]
 
@@ -130,7 +133,25 @@ class loggerConfig:
                 else:
                     command_info[key] = eval(value)
 
-        return command_info               
+        return command_info         
+    
+    def _getTermination(self, termination: str):
+        '''
+        Return CR or Lf in string
+
+        Args:
+            termination (str): CR, LF, CRLF or LFCR
+
+        Return:
+            termination (str): termination in string with backslash 
+        '''
+
+        if termination.replace('LF', '').replace('CR', ''):
+            self.debugLog.error('Termination is not valid')
+            raise ValueError('Termination is not valid')
+        eval_termination = termination.replace('LF', '\n').replace('CR', '\r')
+        
+        return eval_termination
     
 if __name__ == '__main__':
     config = loggerConfig()
