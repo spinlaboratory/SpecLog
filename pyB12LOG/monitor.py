@@ -47,7 +47,7 @@ class monitor:
         self.warning_dict = {}
         self.last_warning_time = None
 
-        self.logRead()
+        self.readLog()
         self.max_pnts = len(self.data_dict['Date'])
         self._getVariableDict()
         self._getAliasByVariable()
@@ -55,7 +55,7 @@ class monitor:
         
         self.plot()
 
-    def logRead(self):
+    def readLog(self):
         del self.log_list # release memory
         self.log_list = [log for log in os.listdir(self.log_dir) if 'log_' in log][-1*self.number_of_file:]
         while self.current_log != self.log_list[-1]: 
@@ -192,7 +192,7 @@ class monitor:
         fig.show() # inital plotting
 
         while(plt.fignum_exists(1)):
-            self.logRead() # check if new log creates
+            self.readLog() # check if new log creates
             # where = self.f.tell() # (option) f current position of pointer
             line = self.f.readline().strip('\n')
             if line: # if there is non-empty new line
