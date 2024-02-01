@@ -68,7 +68,7 @@ class MainWindow(uiclass, baseclass):
         '''
         self.all_data_by_name = {'Date': [], 'Time': [], 'Seconds': []}
         window_length = int(self.windowLength.text()) 
-        self.file_list = [file for file in os.listdir(self.file_dir) if 'log_' in file]
+        self.file_list = [file for file in os.listdir(self.file_dir) if 'log_' in file][-10:]
         
         if not self.file_list: 
             self.debugLogger.error('Logged Data Not Found')
@@ -103,7 +103,7 @@ class MainWindow(uiclass, baseclass):
         Update data when new line appears or new file presents
         '''
         window_length = int(self.windowLength.text())
-        self.file_list = [file for file in os.listdir(self.file_dir) if 'log_' in file]
+        self.file_list = [file for file in os.listdir(self.file_dir) if 'log_' in file][-10:]
         if self.current_file != self.file_list[-1]:
             self.f.close() # when new file exist, close the previous file
             self.current_file = self.file_list[-1]

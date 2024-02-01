@@ -59,17 +59,17 @@ class DEVICE:
             id_command = setting['id_command']
 
             if address in self.deviceAddresses:
-                with self.rm.open_resource(address) as device:
-                    device.baud_rate = baud_rate
-                    device.data_bits = data_bits
-                    if flow_control:
-                        device.flow_control = flow_control
-                    device.read_termination = termination
-                    device.write_termination = termination
-                    if parity:
-                        device.parity = parity
-                    if stop_bits:
-                        device.stop_bits = stop_bits   
+                device = self.rm.open_resource(address)
+                device.baud_rate = baud_rate
+                device.data_bits = data_bits
+                if flow_control:
+                    device.flow_control = flow_control
+                device.read_termination = termination
+                device.write_termination = termination
+                if parity:
+                    device.parity = parity
+                if stop_bits:
+                    device.stop_bits = stop_bits   
             
             else:
                 device = None
@@ -78,8 +78,8 @@ class DEVICE:
             return True
 
         else:
+            self.devices_info = {}
             for name in self.device_config.keys():
-                self.devices_info = {}
                 self._setDevice(name)
     
     def checkDeviceStatus(self, name: str = None):
@@ -88,14 +88,14 @@ class DEVICE:
             id_command = device_info['id_command']
             device = device_info['device']
             try: 
-                device.open()
-                device.query(id_command)
-                device.close()
+                string = device.query(id_command)
+                self.debug_logger.info('get %s from device %s' %(string, name))
                 if not device_info['status']:
                     self.debug_logger.warning('%s is reconnected' % name)
                     device_info['status'] = True
                 return True
-            except:
+            except Exception as err:
+                self.debug_logger.error(err)
                 if device_info['status']: # at the moment when status become disconnected
                     self.debug_logger.warning('%s is disconnected' % name)
                     device_info['status'] = False
