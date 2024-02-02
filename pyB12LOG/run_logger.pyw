@@ -22,7 +22,7 @@ def main_func(config_file = None):
         except Exception as err:
             debugLogger.warning('pyB12LOG initialization failed')
             debugLogger.error(traceback.format_exc())
-
+            
             return
         
         debugLogger.info('pyB12LOG logging started')

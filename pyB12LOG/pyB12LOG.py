@@ -207,6 +207,5 @@ class pyB12LOG:
         self.data_by_variable['Time'] = now
         return True
 
-
-if __name__ == '__main__':
-    pyB12LOG()
+# if __name__ == '__main__':
+#     pyB12LOG()

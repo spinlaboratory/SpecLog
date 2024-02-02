@@ -7,7 +7,7 @@ Monitor.py: plotting data in real-time or static
 
 It use PyQt 6, there are some terms you need to know before modifying this script
 
-1. 'name': the identification of a curve, and the key word to call the curve line and item
+1. 'name': the identification of a curve, and the key word to call the curve line and item. It can be the alias if the alias presents
 2. 'item': the curve items, e.g Legend class from PyQt 6
 3. 'line': the data line for plotting, it is a class from PyQt 6
 
@@ -38,33 +38,42 @@ class MainWindow(uiclass, baseclass):
         # configuration file
         config = loggerConfig(config_file)
         self.settings = config.settings
+        self.device_config = config.devices
         self.file_dir = self.settings['log_folder_location'] + '/B12TLOG/'
         self.commands = config.commands
+        self.getAlias()
+        self.getWarningValueByName()
+        self.status_string = ''
 
         # debug log
         self.debugLogger = debugLog(config_file).logger     
-        
+    
         self.getData()
+        self.setWarningStatusByName()
         self.getPenByName()
         self.getLine() # initialize plot
 
         self.hidden_list = self.all_names.copy()
         self.shown_list = []
-        
-        self.hiddenListWidget.addItems(self.hidden_list)
 
+        self.hiddenListWidget.addItems(self.hidden_list)
         self.hiddenToShown.clicked.connect(self.showItems) # button to move item from hidden widget to shown widget  
         self.shownToHidden.clicked.connect(self.hideItems) # button to move item from shown widget to hidden widget
+        self.clearWarningText.clicked.connect(self.clearWarning) # button to clear warning message 
       
         self.timer = QtCore.QTimer()
         self.timer.setInterval(300) 
+        self.timer.timeout.connect(self.printStatus)
+        self.timer.timeout.connect(self.printWarning)
         self.timer.timeout.connect(self.updateData)
         self.timer.timeout.connect(self.plot)
         self.timer.start()
-    
+
+
+### ======================================================= Data Dictionary =======================================================
     def getData(self):
         '''
-        Get data from logger files
+        Get data from logger files when monitor starts. It is not used for updating data reading
         '''
         self.all_data_by_name = {'Date': [], 'Time': [], 'Seconds': []}
         window_length = int(self.windowLength.text()) 
@@ -79,15 +88,17 @@ class MainWindow(uiclass, baseclass):
             f = open(self.file_dir + file, 'r')
             names = f.readline().strip('\n').split(',')
             if names[0]:
+                names = self.convertNames(names) # at this point, the name is used locally
                 for data in csv.reader(f, delimiter = ','):
                     self.all_data_by_name = self.addDataToDict(names, data, self.all_data_by_name)
             
             if file != self.file_list[-1]: # close the file
                 f.close()
             else: # leave the current file open for further reading
+                # after reading all data, put the local names list to global
                 self.current_file = file
                 self.f = f
-                self.names = names
+                self.names = names 
                 self.window_length = window_length
 
             # for initial data dictionary
@@ -101,6 +112,8 @@ class MainWindow(uiclass, baseclass):
     def updateData(self):
         '''
         Update data when new line appears or new file presents
+
+        This is the data checking processing and used for live data
         '''
         window_length = int(self.windowLength.text())
         self.file_list = [file for file in os.listdir(self.file_dir) if 'log_' in file][-10:]
@@ -109,6 +122,7 @@ class MainWindow(uiclass, baseclass):
             self.current_file = self.file_list[-1]
             self.f = open(self.file_dir + self.current_file, 'r')
             self.names = self.f.readline().strip('\n').split(',')
+            self.names = self.convertNames(self.names) # convert names list from alias 
 
         line = self.f.readline().strip('\n')
         if line:
@@ -136,6 +150,7 @@ class MainWindow(uiclass, baseclass):
             d (dict): target dictionary with added data
         '''
         
+        # convert name from alias:
         # temporary dictionary
         td = {name.strip(): val.strip() for name, val in zip(names, data)}
         # create empty list if key not exists in dictionary
@@ -162,6 +177,8 @@ class MainWindow(uiclass, baseclass):
             d[name].append(val)
         del td # release memory
         return d  
+    
+### ======================================================= X-axis Processing =======================================================
 
     def getXAxisFromTime(self, date: str, time: str):
         '''
@@ -206,7 +223,29 @@ class MainWindow(uiclass, baseclass):
         self.ax.setTicks([self.x_ticks])
 
         return True
-    
+### ======================================================= Drawing Pen =======================================================
+    def getPenByName(self):
+        '''
+        Set curve color and line style to pen
+
+        Idea: loop color list. If color is the same, use different dash line
+        1. loop the color list. e.g. 1%4 = 1 and 5%4 = 1, so the second and fifth element use the same color 
+        2. loop the dash list. e.g. 1//4%4 = 0 and 5//4%4 = 1, so the second element doesn't have dash line but fifth element use dash line [16, 16]
+
+        '''
+        self.pen_by_name = {} #{name: pen}
+
+        color_list_loop = ['#F37021', '#46812B', '#67AE3E', '#4D4D4F'] # can be extend
+        dash_list_loop = [None, [16, 16], [8, 8], [4, 4]] # can be extend
+
+        for index, name in enumerate(self.all_names):
+            color = color_list_loop[index%len(color_list_loop)] # loop color list
+            dash = dash_list_loop[index//len(color_list_loop)%len(dash_list_loop)] # loop dash line list if same color
+            self.pen_by_name[name] = pg.mkPen(color = color, dash = dash) # set to pen by name
+        
+        return True
+
+### ======================================================= Plotting =======================================================
     def plot(self):
         '''
         Plotting data 
@@ -222,6 +261,7 @@ class MainWindow(uiclass, baseclass):
                 self.legend.removeItem(name) # remove legend
                 self.line_by_name[name].setData([], []) # display empty line
 
+### ======================================================= List Widget Interaction =======================================================
     def hideItems(self):
         '''
         Move items from shown list to hidden list, and from shown widget to hidden widget
@@ -249,25 +289,144 @@ class MainWindow(uiclass, baseclass):
 
         return True
 
-    def getPenByName(self):
+### =======================================================Alias Related=======================================================
+    def getAlias(self, name: str = None):
         '''
-        Set curve color and line style to pen
+        Get alias and assign it to the name
 
-        Idea: loop color list. If color is the same, use different dash line
-        1. loop the color list. e.g. 1%4 = 1 and 5%4 = 1, so the second and fifth element use the same color 
-        2. loop the dash list. e.g. 1//4%4 = 0 and 5//4%4 = 1, so the second element doesn't have dash line but fifth element use dash line [16, 16]
+        Args:
+            name (str, option): if name is provided, return the alias, otherwise get alias by name dict
 
+        Returns:
+            alias (str): an alias
         '''
-        self.pen_by_name = {} #{name: pen}
+        if not name: # generate alias dictionary
+            self.alias_by_name = {} # {name: alias}
+            for device in self.device_config:
+                for name, info in self.commands[device].items():
+                    if info['alias']:
+                        self.alias_by_name[name] = info['alias']
+                    else:
+                        self.alias_by_name[name] = name
 
-        color_list_loop = ['#F37021', '#46812B', '#67AE3E', '#4D4D4F'] # can be extend
-        dash_list_loop = [None, [16, 16], [8, 8], [4, 4]] # can be extend
-
-        for index, name in enumerate(self.all_names):
-            color = color_list_loop[index%len(color_list_loop)] # loop color list
-            dash = dash_list_loop[index//len(color_list_loop)%len(dash_list_loop)] # loop dash line list if same color
-            self.pen_by_name[name] = pg.mkPen(color = color, dash = dash) # set to pen by name
+            return True
+        else:
+            return self.alias_by_name[name] # this is the special case that the name is actually variable name 
+    
+    def convertNames(self, names: list):
+        '''
+        Convert a list of name to a list of alias
+        Args:
+            Names (list): a list of name
         
+        Returns:
+            Names (list): a list of name from alias
+        '''
+
+        for i in range(len(names)):
+            if names[i].strip() in ['Date', 'Time', 'Seconds']: # not consider x-axis labels
+                pass
+            else:
+                names[i] = self.getAlias(names[i].strip()) # strip white space in case
+            
+        return names
+
+### =======================================================Status Related=======================================================
+    def printStatus(self):
+        '''
+        Print the status of logger and devices
+        '''
+        
+        current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
+        if 'pyB12logger_running.exe' in current_exe:
+            string = 'Logger Enable\n'
+        else:
+            string = 'Logger Disable\n'
+        
+        for device in self.device_config:
+            if self.device_config[device]['device_status'] == False:
+                string += device + ' Disable\n'
+            else:
+                temp = device + ' Enable\n'
+                for name in self.commands[device]:
+                    name = self.getAlias(name)
+                    if self.data_by_name[name][-1] in [_np.nan]: # check the last data point, please refer to np.nan equality
+                        temp = device + ' Disable\n'
+                        break
+                string += temp
+
+        if self.status_string != string:
+            self.status_string = string
+            self.textIndicator.clear()
+            self.textIndicator.appendPlainText(self.status_string)
+
+### ======================================================= Warning Related =======================================================
+    def getWarningValueByName(self):
+        '''
+        Get warning values
+        '''
+        self.min_by_name = {}
+        self.max_by_name = {}
+        self.static_by_name = {}
+        for device in self.device_config:
+            for name, info in self.commands[device].items():
+                name = self.getAlias(name) # convert to alias
+                self.min_by_name[name] = info['min'] 
+                self.max_by_name[name] = info['max']
+                self.static_by_name[name] = info['static']
+
+    def setWarningStatusByName(self):
+        '''
+        Set warning status to True if the warning has been displayed
+        '''
+
+        self.warning_status_by_name = {name: False for name in self.data_by_name}
+
+                
+    def printWarning(self):
+        '''
+        Print warning if the value is not in range
+        '''
+        for name in self.data_by_name:
+            
+            if name not in ['Date', 'Time', 'Seconds']:
+                warning_status = False
+                minimum = self.min_by_name[name]
+                maximum = self.max_by_name[name]
+                static = self.static_by_name[name]
+
+                
+                if static:
+                    if self.data_by_name[name][-1] != static:
+                        warning_status = True
+                
+                if minimum:
+                    if self.data_by_name[name][-1] > minimum:
+                        warning_status = True
+            
+                if maximum:
+                    if self.data_by_name[name][-1] < maximum:
+                        warning_status = True
+
+                if warning_status and not self.warning_status_by_name[name]: # warning begins
+                    current_time = self.all_data_by_name['Date'][-1] + ' ' + self.all_data_by_name['Time'][-1]
+                    self.warning_status_by_name[name] = True
+                    string = current_time + ': ' + name + ' error!!!'
+                    self.warningText.appendPlainText(string)
+
+                elif not warning_status and self.warning_status_by_name[name]: # warning ends
+                    current_time = self.all_data_by_name['Date'][-1] + ' ' + self.all_data_by_name['Time'][-1]
+                    self.warning_status_by_name[name] = False
+                    string = current_time + ': ' + name + ' error clean!!!'
+                    self.warningText.appendPlainText(string)
+        
+    def clearWarning(self):
+        '''
+        Clear warning information
+        '''
+
+        self.warningText.clear()
+
         return True
 
 if __name__ == "__main__":
