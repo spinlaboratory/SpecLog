@@ -11,6 +11,7 @@ Company: Bridge 12 Technologies, Inc
 import pyvisa
 from pyvisa.constants import Parity, StopBits
 from .debugLog import *
+import traceback
 
 class DEVICE:
     def __init__(self, config, debug_logger):
@@ -20,7 +21,7 @@ class DEVICE:
         self.device_config = config.devices
         self._setDevice()
 
-        self.checkDeviceStatus()
+        self.checkDeviceStatus(init = True)
     
     def _getResourceManager(self):
         rm = pyvisa.ResourceManager()
@@ -47,7 +48,7 @@ class DEVICE:
         '''
         if name:
             setting = self.device_config[name]
-            self.debug_logger.info('Setting: %s' %name)
+            # self.debug_logger.info('Setting: %s' %name)
             status = setting['device_status']
             address = setting['address']
             baud_rate = setting['baud_rate']
@@ -82,28 +83,68 @@ class DEVICE:
             for name in self.device_config.keys():
                 self._setDevice(name)
     
-    def checkDeviceStatus(self, name: str = None):
+    def checkDeviceStatus(self, name: str = None, init: bool = False):
         if name:
-            device_info = self.devices_info[name]
-            id_command = device_info['id_command']
-            device = device_info['device']
+            id_command = self.devices_info[name]['id_command']
+            device = self.devices_info[name]['device']
+
             try: 
-                string = device.query(id_command)
-                self.debug_logger.info('get %s from device %s' %(string, name))
-                if not device_info['status']:
-                    self.debug_logger.warning('%s is reconnected' % name)
-                    device_info['status'] = True
+                # Case 1: the device becomes disconnected for some reasons
+                if self.device_config[name]['address'] not in self.rm.list_resources():
+                    try:
+                        if self.devices_info[name]['status']:
+                            device.close() # close the socket even though the IO error could be given by pyvisa
+                    except:
+                        pass
+
+                    if self.devices_info[name]['status']: # the moment when device is disconnected
+                        self.debug_logger.warning('%s is disconnected' % name)
+                    self.devices_info[name]['status'] = False # change the status to False
+                    return False
+                
+                # Case 2: the device is disconnected but in configuration file the status is True
+                if not self.devices_info[name]['status'] and self.devices_info[name]['config_status']:
+                    if self.device_config[name]['address'] in self.rm.list_resources():  # When address presents in the Resource Manager
+                        self._setDevice(name) # Reopen the socket and give settings to device, this step will change the status True
+                        self.devices_info[name]['status'] = False # Therefore this step is necessary
+                        # will continue for the communication checks
+                    else: # Address not presents in the Resource Manager
+                        return False
+                    
+                # device = self.devices_info[name]['device']
+                print(id(device))
+                string = device.query(id_command) # check the communication 
+                
+                if self.devices_info[name]['status']: # set logger only once
+                    if init:
+                        self.debug_logger.info('get %s from device %s' %(string, name))
+                        self.debug_logger.info('%s is connected' % name)
+
+                else:
+                    self.debug_logger.info('get %s from device %s' %(string, name))
+                    self.debug_logger.info('%s is reconnected' % name)
+                
+                self.devices_info[name]['status'] = True # keep status to True
                 return True
+            
+            # Case 3: the communication fails possibly due to power cycle, usb unplug, device fails, etc.
             except Exception as err:
-                self.debug_logger.error(err)
-                if device_info['status']: # at the moment when status become disconnected
+                self.debug_logger.critical(traceback.format_exc())  
+                if self.devices_info[name]['status']: # at the moment when status become disconnected
+                    self.debug_logger.error(err) # record the errors
                     self.debug_logger.warning('%s is disconnected' % name)
-                    device_info['status'] = False
+                    try:
+                        device.close() # close the socket even though the IO error could be given by pyvisa
+                    except:
+                        pass
+
+                # keep status to False if error and prevent continuing sending id_command until the reconnection succeed 
+                self.devices_info[name]['status'] = False
                 return False
                 
         else:
             for name in self.devices_info.keys():
-                if self.checkDeviceStatus(name):
+                if self.checkDeviceStatus(name, init):
                     self.debug_logger.info('%s is valid and connected' % name)
                 else:
                     self.debug_logger.info('%s is invalid' % name)

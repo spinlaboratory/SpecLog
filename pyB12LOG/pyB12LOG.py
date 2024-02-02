@@ -57,6 +57,7 @@ class pyB12LOG:
                 index = self.device_config[name]['index']
                 device = devices_info[name]['device']
                 for variable in info.keys():
+                    print(variable)
                     if self.devices.checkDeviceStatus(name): # check the connection of a device
                         command = info[variable]['command']
                         data_string = device.query(command)
