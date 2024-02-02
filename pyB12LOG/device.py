@@ -15,7 +15,7 @@ from .debugLog import *
 class DEVICE:
     def __init__(self, config, debug_logger):
         self.devices_info = {}
-        self.rm, self.deviceAddresses = self._getResourceManager()
+        self._getResourceManager()
         self.debug_logger = debug_logger
         self.device_config = config.devices
         self._setDevice()
@@ -23,17 +23,10 @@ class DEVICE:
         self.checkDeviceStatus()
     
     def _getResourceManager(self):
-        rm = pyvisa.ResourceManager()
-        
-        if rm.last_status != 0: # clean last status when initial
-            self.debug_logger.warning('The resource was taken')
-            rm.close()
-            rm = pyvisa.ResourceManager()
-            self.debug_logger.warning('The resource has been closed and re-opened')
+        self.rm = pyvisa.ResourceManager()
+        self.deviceAddresses = self.rm.list_resources()
 
-        deviceAddresses = rm.list_resources()
-
-        return rm, deviceAddresses
+        return True
         
     def _setDevice(self, name: str = None):
         '''
@@ -82,21 +75,26 @@ class DEVICE:
             for name in self.device_config.keys():
                 self._setDevice(name)
     
-    def checkDeviceStatus(self, name: str = None):
+    def checkDeviceStatus(self, name: str = None, init: bool = False):
+        
         if name:
             device_info = self.devices_info[name]
             id_command = device_info['id_command']
             device = device_info['device']
             try: 
-                string = device.query(id_command)
-                self.debug_logger.info('get %s from device %s' %(string, name))
-                if not device_info['status']:
-                    self.debug_logger.warning('%s is reconnected' % name)
-                    device_info['status'] = True
+                if device_info['status']:
+                    string = device.query(id_command)
+                else:
+                    return False
+                if init:
+                    self.debug_logger.info('get %s from device %s' %(string, name))
+                    self.debug_logger.info('%s is connected' % name)
+                device_info['status'] = True
                 return True
+            
             except Exception as err:
-                self.debug_logger.error(err)
                 if device_info['status']: # at the moment when status become disconnected
+                    self.debug_logger.error(err)
                     self.debug_logger.warning('%s is disconnected' % name)
                     device_info['status'] = False
                 return False

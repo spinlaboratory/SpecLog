@@ -18,20 +18,21 @@ from .debugLog import *
 class pyB12LOG:
     def __init__(self, config_file: str = None):
         
-        config = loggerConfig(config_file)
+        self.config = loggerConfig(config_file)
         self.debugLogger = debugLog(config_file).logger
-        self.settings = config.settings 
-        self.commands = config.commands # dictionary {model: {variable: {command, alias, min, max, static}}}
-        self.device_config = config.devices
+        self.settings = self.config.settings 
+        self.commands = self.config.commands # dictionary {model: {variable: {command, alias, min, max, static}}}
+        self.device_config = self.config.devices
 
         self.log_dir = self.settings['log_folder_location'] + '/B12TLOG/'
         self.delay = int(self.settings['log_interval'])
         self.max_size = int(self.settings['save_file_size_kb'])
         
+        self.connectDevices()
+        self.reconnectDevices()
         self._checkDirectory()
-        self.devices = DEVICE(config, self.debugLogger) # establish communication 
         self.data_by_variable = self._getDataDictByVariable(self.commands) # initial empty dictionary for storing data
-        
+    
         self.header = self._makeLogHeader()
         self.last_query_time = None
         self.current_log_file = None
@@ -48,6 +49,8 @@ class pyB12LOG:
             self._createNewLog()
 
         now = time.time()
+        if self.reconnectDevices(): # check the device connections
+            self.debugLogger.info('A device is reconnected')
         if not self.last_query_time or now - self.last_query_time > self.delay:
             
             self._setTimeInDataDictByVariable() # update time
@@ -74,6 +77,34 @@ class pyB12LOG:
                     self.debugLogger.info('File size exceed, new log file created')
 
             self._saveData()
+
+    def connectDevices(self):
+        '''
+        Call DEVICE
+        '''
+        self.devices = DEVICE(self.config , self.debugLogger) # establish communication 
+        self.available_addresses = list(self.devices.rm.list_resources())
+        return True
+    
+    def reconnectDevices(self):
+        restart_DEVICE = False
+
+        for name in self.device_config.keys():
+            address = self.device_config[name]['address']
+
+            if address not in self.devices.rm.list_resources() and address in self.available_addresses: # when a connection is loss
+                # This step is to prevent the moment when the device is shown in the resource manager but connection fails
+                self.available_addresses.remove(address)
+
+            if address in self.devices.rm.list_resources() and address not in self.available_addresses and not self.devices.devices_info[name]['status']:
+                restart_DEVICE = True
+
+        if restart_DEVICE:
+            del self.devices # delete the DEVICE class
+            return self.connectDevices()
+
+        else:
+            return False
 
     def _checkDirectory(self):
         if not os.path.exists(self.log_dir):
