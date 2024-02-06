@@ -1,135 +1,211 @@
 """
 pyB12LOG: The logging program for instrumentations
 
-pyB12LOG: creating logging files and configurations and controlling whole logger.
+pyB12LOG: read configurations, get available devices, send command and save return.
 
 Author: Yen-Chun Huang
 
 Company: Bridge 12 Technologies, Inc
 """
 
-import pyvisa
-from .general import *
+from .device import *
 import time
-import logging
+import datetime
 import os
-from .config.config import CONFIG, SERIAL_CONFIG
-from configparser import ConfigParser
+from .loggerConfig import *
+from .debugLog import *
 
 class pyB12LOG:
-    def __init__(self):
-        self.timeDelay, self.logDir, self.fileSize = self._getLogSettings() 
-        self.debugLogger = self.initDebugLog()
-
-        self.rm = pyvisa.ResourceManager()
-        self.deviceAddresses = self.rm.list_resources()
-
-        self._getDeviceConfig()
-        self.lastCheckTime = time.time()
-        self.device = DEVICE(self.debugLogger)
-        self.firstLog = True
+    def __init__(self, config_file: str = None):
         
-    def _getDeviceConfig(self):
-        # To find device config file
-        self.deviceConfig = ConfigParser()
+        self.config = loggerConfig(config_file)
+        self.debugLogger = debugLog(config_file).logger
+        self.settings = self.config.settings 
+        self.commands = self.config.commands # dictionary {model: {variable: {command, alias, min, max, static}}}
+        self.device_config = self.config.devices
 
-        # Find device config path
-        configKey = 'CONFIG'
-        deviceConfigDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
-        self.deviceConfigDir= deviceConfigDirHome +'/B12TLOG_Config/'
-        listDir = os.listdir(self.deviceConfigDir)
-
-        # Create device config if not exists
-        if 'device_config.cfg' not in listDir:
-
-            # Put current available addresses and required items for serial communication to list
-            items = []
-            for key in SERIAL_CONFIG:
-                items.extend([item for item in SERIAL_CONFIG[key].keys()])
-            
-            # List cannot be modified in config
-            self.deviceConfig['GENERAL'] = {
-                'device_addresses': ", ".join(list(self.deviceAddresses)),
-                'items': ", ".join(items),            
-            }
-
-            # initial with current device info
-            for address in self.deviceAddresses:
-                self.deviceConfig[address] = {}
-                for key in SERIAL_CONFIG:
-                    self.deviceConfig[address] = {**self.deviceConfig[address],
-                        **{item: val for item, val in SERIAL_CONFIG[key].items() 
-                    }}
-                self.deviceConfig[address]['device_address'] = "'%s'"%address
-            with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
-                self.deviceConfig.write(conf)
+        self.log_dir = self.settings['log_folder_location'] + '/B12TLOG/'
+        self.delay = int(self.settings['log_interval'])
+        self.max_size = int(self.settings['save_file_size_kb'])
         
-        else:
-            self._updateDeviceConfig()
+        self.connectDevices()
+        self.reconnectDevices()
+        self._checkDirectory()
+        self.data_by_variable = self._getDataDictByVariable(self.commands) # initial empty dictionary for storing data
+    
+        self.header = self._makeLogHeader()
+        self.last_query_time = None
+        self.current_log_file = None
 
-    def _updateDeviceConfig(self):
-        # To update device config file 
-        self.deviceConfig.read(self.deviceConfigDir + '/device_config.cfg')
-        self.deviceAddresses = self.rm.list_resources()
 
-        # if addresses in config file is different from current available address
-        if self.deviceConfig['GENERAL']["device_addresses"] != ", ".join(list(self.deviceAddresses)):
-            # update the device addresses in config file
-            self.deviceConfig['GENERAL']["device_addresses"] = ", ".join(list(self.deviceAddresses))
-
-            # new device appear
-            for address in self.deviceAddresses:
-                if address not in self.deviceConfig.sections():
-                    self.deviceConfig[address] = {}
-                    for key in SERIAL_CONFIG:
-                        self.deviceConfig[address] = {
-                            **self.deviceConfig[address],
-                            **{item: val for item, val in SERIAL_CONFIG[key].items()} 
-                        }
-                    self.deviceConfig[address]['device_address'] = "'%s'"%address
-            
-                with open(self.deviceConfigDir+'/device_config.cfg', 'w') as conf:
-                    self.deviceConfig.write(conf)
     def log(self):
-        self._updateDeviceConfig()
-        if time.time() - self.lastCheckTime > self.timeDelay:
-            self.logStartTime = time.time()
-            self.device.log()
-            self.lastCheckTime = time.time()
-            self.logDeltaTime = self.lastCheckTime - self.logStartTime
-            
-            if self.firstLog:
-                self.debugLogger.info('Log interval of %0.1f s. Logging takes %0.1f s to complete.' %(self.timeDelay, self.logDeltaTime))
-                self.firstLog = False
-            if self.logDeltaTime > self.timeDelay:
-                self.debugLogger.info('Log interval of %0.1f s is too short. Logging takes %0.1f s to complete. Log interval is set to %0.1f s.' %(self.timeDelay, self.logDeltaTime, self.logDeltaTime + 0.1))
-                self.timeDelay = self.logDeltaTime + 0.1
-            
-    def _getLogSettings(self):
-        configKey = 'CONFIG'
-        logDirHome = CONFIG[configKey]['log_folder_location'][1:-1]
-        timeDelay = float(CONFIG[configKey]['log_interval'])
-        fileSize = int(CONFIG[configKey]['save_file_size_kb']) * 1024
+        '''
+        Send command to a valid device, analyze return and save data to log file
 
-        listDir = os.listdir(logDirHome)
-        logDir= logDirHome +'/B12TLOG/'
-        if 'B12TLOG' not in listDir:
-            os.mkdir(logDir)
+        It runs one time only.  
+        '''
+        if not self.current_log_file:
+            self.debugLogger.info('new log file created')
+            self._createNewLog()
+
+        now = time.time()
+        if self.reconnectDevices(): # check the device connections
+            self.debugLogger.info('A device is reconnected')
+        if not self.last_query_time or now - self.last_query_time > self.delay:
+            
+            self._setTimeInDataDictByVariable() # update time
+            devices_info = self.devices.devices_info # dictionary: {model: {status, config_status, device, id_command}}
+            for name, info in self.commands.items():
+                delimiter = self.device_config[name]['delimiter']
+                index = self.device_config[name]['index']
+                device = devices_info[name]['device']
+                for variable in info.keys():
+                    if self.devices.checkDeviceStatus(name): # check the connection of a device
+                        command = info[variable]['command']
+                        data_string = device.query(command)
+                        data = self._returnStringConverter(data_string, delimiter, index)
+                    
+                    else:
+                        data = 'nan' # write nan to not available data
+
+                    self.data_by_variable[variable] = data
+
+            self.last_query_time = now
+            
+            if self._checkFileSize(): # exceed the maximum file size
+                if self._createNewLog(): # create log with header
+                    self.debugLogger.info('File size exceed, new log file created')
+
+            self._saveData()
+
+    def connectDevices(self):
+        '''
+        Call DEVICE
+        '''
+        self.devices = DEVICE(self.config , self.debugLogger) # establish communication 
+        self.available_addresses = list(self.devices.rm.list_resources())
+        return True
+    
+    def reconnectDevices(self):
+        restart_DEVICE = False
+
+        for name in self.device_config.keys():
+            address = self.device_config[name]['address']
+
+            if address not in self.devices.rm.list_resources() and address in self.available_addresses: # when a connection is loss
+                # This step is to prevent the moment when the device is shown in the resource manager but connection fails
+                self.available_addresses.remove(address)
+
+            if address in self.devices.rm.list_resources() and address not in self.available_addresses and not self.devices.devices_info[name]['status']:
+                restart_DEVICE = True
+
+        if restart_DEVICE:
+            del self.devices # delete the DEVICE class
+            return self.connectDevices()
+
+        else:
+            return False
+
+    def _checkDirectory(self):
+        if not os.path.exists(self.log_dir):
+            os.mkdir(self.log_dir)
+            return False
+        return True
+    
+    def _createNewLog(self):
+        '''
+        Create new log file in log directory
+        '''
+        now = datetime.datetime.now().strftime('%Y%m%d%H%M%S') #YYYYMMDDHMS
+        self.current_log_file = self.log_dir + '/log_' + now + '.csv'
+        with open(self.current_log_file, 'w') as f:
+            f.write(self.header)
+
+        return True
+
+    def _makeLogHeader(self):
+        '''
+        Make a log header base on the data by variable dictionary
+
+        Return:
+            header (str) format: 'Date, Time, variable 1, variable 2.....'
+        '''   
+        list_of_items = list(self.data_by_variable.keys())
+        header = ', '.join(list_of_items) + '\n'
+
+        return header
+    
+    def _saveData(self):
+        '''
+        Save current data to current log file
+
+        '''
+
+        list_of_data = list(self.data_by_variable.values())
+        data_string = ', '.join(list_of_data) + '\n'
         
-        return timeDelay, logDir, fileSize
+        with open(self.current_log_file, 'a') as f:
+            f.write(data_string)
 
-    def initDebugLog(self):
-        logpath = self.logDir + '/debug_log.txt'
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.DEBUG)
-        ch = logging.FileHandler(str(logpath))
-        ch.setLevel(logging.INFO)
-        ch2 = logging.StreamHandler()
-        ch2.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        ch.setFormatter(formatter)
-        ch2.setFormatter(formatter)
-        logger.addHandler(ch)
-        logger.addHandler(ch2)
+        return True
+    
+    def _checkFileSize(self):
+        '''
+        Check the size of file
 
-        return logger
+        Return:
+            bool: True if file is oversize
+        '''      
+        if os.path.getsize(self.current_log_file) > self.max_size * 1024:
+            return True
+        else:
+            return False
+
+    def _getDataDictByVariable(self, command_dict: dict):
+        '''
+        Get the variable list based on the model and it's command dictionary 
+        Args:
+            command_dict (dict): the command list for a device, {variable: {command, alias, min, max, static}}
+
+        Returns:
+            data_dict (dict): the data dictionary in format {variable: reading}
+
+        '''
+        today = str(datetime.date.today())
+        now = str(datetime.datetime.now().strftime("%H:%M:%S"))
+        data_dict = {'Date': today, 'Time': now}
+        for info in command_dict.values():
+           temp_dict = {key : None for key in info}
+           data_dict = {**data_dict, **temp_dict}
+
+        return data_dict
+    
+    def _returnStringConverter(self, string: str, delimiter: str, index: int):
+        '''
+        Convert returned string and acquire data from it
+        Args:
+            delimiter (str): the delimiter for string analysis
+            index (int): the data index
+
+        Returns:
+            data (string): return data in str
+        '''
+        string.replace(' ', '') # remove white space
+        string.replace('\n', '') # remove cr
+        string.replace('\t', '') # remove fl
+        data = string.split(delimiter)[index]
+
+        return data
+    
+    def _setTimeInDataDictByVariable(self):
+        '''
+        Update the time in data dictionary by variable
+        '''
+        today = str(datetime.date.today())
+        now = str(datetime.datetime.now().strftime("%H:%M:%S"))
+        self.data_by_variable['Date'] = today
+        self.data_by_variable['Time'] = now
+        return True
+
+# if __name__ == '__main__':
+#     pyB12LOG()

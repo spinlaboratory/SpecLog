@@ -18,7 +18,10 @@ def main_func():
     if 'pyB12monitor.exe' in hashDict and hashDict['pyB12monitor.exe'] > 1:
         exit()
     else:
-        fig = monitor(number_of_file = args.number_of_file)
+        app = QApplication(sys.argv)
+        window = MainWindow()
+        window.show()
+        app.exec()
 
 if __name__ == "__main__":
     main_func()

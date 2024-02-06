@@ -16,7 +16,6 @@ desktop_folder = os.path.normpath('C:/Users/Public/Desktop/')
 source_running_logger = os.path.dirname(sys.executable) + '/scripts/pyB12logger_running.exe' 
 source_monitor = os.path.dirname(sys.executable) + '/scripts/pyB12monitor.exe' 
 
-
 def main_func():
 
     parser = argparse.ArgumentParser(prog='pyB12logger')
@@ -75,7 +74,7 @@ def main_func():
                 print('pyB12logger debug mode started')
     
     elif args.status == 'stop':
-        os.system("taskkill /im pyB12logger_running.exe /F")
+        os.system("taskkill /im pyB12logger_running.exe /F /t")
         print('pyB12logger stopped')
     else: # ignore
         return
