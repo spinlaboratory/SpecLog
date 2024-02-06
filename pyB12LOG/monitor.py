@@ -457,9 +457,10 @@ class MainWindow(uiclass, baseclass):
             if name in self.shown_list: # plot line in shown widget
 
                 if not self.legend.getLabel(self.line_by_name[name]): # if not legend, add legend 
-                    self.legend.addItem(self.line_by_name[name], name) 
+                    self.legend.addItem(self.line_by_name[name], name)
 
                 self.line_by_name[name].setData(self.x, self.data_by_name[name])
+
             else: # hide line in hidden widget
                 self.legend.removeItem(name) # remove legend
                 self.line_by_name[name].setData([], []) # display empty line
@@ -602,7 +603,7 @@ class MainWindow(uiclass, baseclass):
                 temp = device + ' Enable\n'
                 for name in self.commands[device]:
                     name = self.getAlias(name)
-                    if self.data_by_name[name][-1] in [_np.nan]: # check the last data point, please refer to np.nan equality
+                    if self.all_data_by_name[name][-1] in [_np.nan] or 'pyB12logger_running.exe' not in current_exe: # check the last data point, please refer to np.nan equality
                         temp = device + ' Disable\n'
                         break
                 string += temp
@@ -639,7 +640,7 @@ class MainWindow(uiclass, baseclass):
         '''
         Print warning if the value is not in range
         '''
-        for name in self.data_by_name:
+        for name in self.all_data_by_name:
             
             if name not in ['Date', 'Time', 'Seconds']:
                 warning_status = False
@@ -648,15 +649,15 @@ class MainWindow(uiclass, baseclass):
                 static = self.static_by_name[name]
 
                 if static:
-                    if self.data_by_name[name][-1] != static:
+                    if self.all_data_by_name[name][-1] != static:
                         warning_status = True
                 
                 if minimum:
-                    if self.data_by_name[name][-1] > minimum:
+                    if self.all_data_by_name[name][-1] < minimum:
                         warning_status = True
             
                 if maximum:
-                    if self.data_by_name[name][-1] < maximum:
+                    if self.all_data_by_name[name][-1] > maximum:
                         warning_status = True
 
                 if warning_status and not self.warning_status_by_name[name]: # warning begins
@@ -675,7 +676,9 @@ class MainWindow(uiclass, baseclass):
         '''
         Clear warning information
         '''
-
+        for name in self.data_by_name:
+            if name not in ['Date', 'Time', 'Seconds']:
+                self.warning_status_by_name[name] = False
         self.warningText.clear()
 
         return True
