@@ -27,7 +27,7 @@ setuptools.setup(
         'Operating System :: Microsoft :: Windows',
     ],
     python_requires='>=3.10',
-    install_requires=['pyvisa >= 1.13.0', 'matplotlib >= 3.7.1', 'numpy >= 1.24.3', 'tk >= 0.1.0'],
+    install_requires=['pyvisa >= 1.13.0', 'pyvisa-py >= 0.7.0' 'matplotlib >= 3.7.1', 'numpy >= 1.24.3', 'pyqt6 >= 6.6.1', 'PySide6 >= 6.6.1', 'pyqtgraph >= 0.13.3'],
     entry_points = dict(
         gui_scripts = [
             "pyB12monitor = pyB12LOG.run_monitor:main_func",
