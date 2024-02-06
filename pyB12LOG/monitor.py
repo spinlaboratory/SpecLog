@@ -136,7 +136,7 @@ class MainWindow(uiclass, baseclass):
             self.all_x = self.all_data_by_name['Seconds']
             self.data_by_name = {name: val[-1*window_length:] for name, val in self.all_data_by_name.items() if name not in ['Date', 'Time', 'Seconds']}
             self.x = self.all_x[-1* window_length:]
-            x_ticks_density = window_length//10
+            x_ticks_density = window_length//10 + 1
             self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][-1*window_length:][i]) for i in range(len(self.x))][::x_ticks_density]
             
     def updateData(self):
@@ -180,7 +180,6 @@ class MainWindow(uiclass, baseclass):
         self.x = self.all_x[-1*window_length:]
         x_ticks_density = window_length//10 + 1
         self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][-1*window_length:][i]) for i in range(len(self.x))][::x_ticks_density]
-        self.ax.setTicks([self.x_ticks])
 
         return self.plot_type
     
@@ -193,7 +192,6 @@ class MainWindow(uiclass, baseclass):
                     self.x = self.all_x[index[0]:index[1]]
                     x_ticks_density = (index[1] - index[0])//10 + 1
                     self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][index[0]:index[1]][i]) for i in range(len(self.x))][::x_ticks_density]
-                    self.ax.setTicks([self.x_ticks])
                     self.static_update_request = False # just update the static figure once
                 
             elif self.selected_data_by_file: # only update when time when 'OK' button is pressed and file is selected 
@@ -201,7 +199,6 @@ class MainWindow(uiclass, baseclass):
                 self.x = self.temp_data_by_name['Seconds']
                 x_ticks_density = len(self.x)//10 + 1
                 self.x_ticks = [(self.x[i], self.temp_data_by_name['Time'][i]) for i in range(len(self.x))][::x_ticks_density]
-                self.ax.setTicks([self.x_ticks])
                 self.static_update_request = False # just update the static figure once
 
         return self.plot_type
@@ -286,7 +283,6 @@ class MainWindow(uiclass, baseclass):
         self.graphWidget.showGrid(x = True, y = True)
         self.legend = self.graphWidget.addLegend()
         self.ax = self.graphWidget.getAxis('bottom')
-        self.ax.setTicks([self.x_ticks])
 
         return True
 ### ======================================================= Drawing Pen =======================================================
@@ -460,11 +456,12 @@ class MainWindow(uiclass, baseclass):
                     self.legend.addItem(self.line_by_name[name], name)
 
                 self.line_by_name[name].setData(self.x, self.data_by_name[name])
+                self.ax.setTicks([self.x_ticks])
 
             else: # hide line in hidden widget
                 self.legend.removeItem(name) # remove legend
                 self.line_by_name[name].setData([], []) # display empty line
-
+        
 ### ======================================================= List Widget Interaction =======================================================
     def saveDisplaySettings(self):
         '''
