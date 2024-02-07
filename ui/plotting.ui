@@ -278,6 +278,12 @@
      </item>
      <item row="0" column="1">
       <widget class="QSpinBox" name="windowLength">
+       <property name="readOnly">
+        <bool>false</bool>
+       </property>
+       <property name="keyboardTracking">
+        <bool>false</bool>
+       </property>
        <property name="minimum">
         <number>10</number>
        </property>
