@@ -38,5 +38,5 @@ setuptools.setup(
             "pyB12logger_running = pyB12LOG.run_logger:main_func",
         ],
     ),
-    package_data={"pyB12LOG": ["config/command.cfg", "config/config.cfg", "config/serial.cfg"]},
+    package_data={"pyB12LOG": ["config/command.cfg", "config/config.cfg", "config/serial.cfg", "ui/plotting.ui"]},
 )
