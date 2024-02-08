@@ -136,8 +136,8 @@ class MainWindow(uiclass, baseclass):
             self.all_x = self.all_data_by_name['Seconds']
             self.data_by_name = {name: val[-1*window_length:] for name, val in self.all_data_by_name.items() if name not in ['Date', 'Time', 'Seconds']}
             self.x = self.all_x[-1* window_length:]
-            x_ticks_density = window_length//10 + 1
-            self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][-1*window_length:][i]) for i in range(len(self.x))][::x_ticks_density]
+            self.x_ticks = self.getXTicks(self.x, self.all_data_by_name['Time'][-1*window_length:])
+
             
     def updateData(self):
         '''
@@ -178,8 +178,7 @@ class MainWindow(uiclass, baseclass):
         self.window_length = window_length
         self.data_by_name = {name: val[-1*window_length:] for name, val in self.all_data_by_name.items() if name not in ['Date', 'Time']}
         self.x = self.all_x[-1*window_length:]
-        x_ticks_density = window_length//10 + 1
-        self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][-1*window_length:][i]) for i in range(len(self.x))][::x_ticks_density]
+        self.x_ticks = self.getXTicks(self.x, self.all_data_by_name['Time'][-1*window_length:])
 
         return self.plot_type
     
@@ -190,15 +189,13 @@ class MainWindow(uiclass, baseclass):
                     index = self.static_index
                     self.data_by_name = {name: val[index[0]:index[1]] for name, val in self.all_data_by_name.items() if name not in ['Date', 'Time']}
                     self.x = self.all_x[index[0]:index[1]]
-                    x_ticks_density = (index[1] - index[0])//10 + 1
-                    self.x_ticks = [(self.x[i], self.all_data_by_name['Time'][index[0]:index[1]][i]) for i in range(len(self.x))][::x_ticks_density]
+                    self.x_ticks = self.getXTicks(self.x, self.all_data_by_name['Time'][index[0]:index[1]])
                     self.static_update_request = False # just update the static figure once
                 
             elif self.selected_data_by_file: # only update when time when 'OK' button is pressed and file is selected 
                 self.data_by_name = {name: val for name, val in self.temp_data_by_name.items() if name not in ['Date', 'Time']}
                 self.x = self.temp_data_by_name['Seconds']
-                x_ticks_density = len(self.x)//10 + 1
-                self.x_ticks = [(self.x[i], self.temp_data_by_name['Time'][i]) for i in range(len(self.x))][::x_ticks_density]
+                self.x_ticks = self.getXTicks(self.x, self.temp_data_by_name['Time'])
                 self.static_update_request = False # just update the static figure once
 
         return self.plot_type
@@ -264,6 +261,32 @@ class MainWindow(uiclass, baseclass):
         delta = datetime_object - datetime(1970,1,1)
 
         return int(delta.total_seconds())
+    
+    def getXTicks(self, seconds: list, time: list, ticks_number: int = 10):
+        '''
+        Get less dense X ticks from x list and time list 
+        
+        Args:
+            seconds (list): the list of seconds in integer
+            time (list): the list of time in string
+            ticks_number (int): the number of ticks in plotting 
+
+        Returns:
+            x_ticks (list): the list of tuple in format (seconds: time)
+
+        '''
+        if not len(seconds) or len(seconds) != len(time):
+            
+            return False
+        
+        if len(seconds) <= ticks_number:
+            
+            x_ticks = [(seconds[i], time[i]) for i in range(len(seconds))]
+        
+        else:
+            x_ticks = [(seconds[i], time[i]) for i in _np.linspace(0, len(seconds) -1, ticks_number, dtype = int)]
+        
+        return x_ticks
         
     def getLine(self):
         '''
@@ -298,12 +321,12 @@ class MainWindow(uiclass, baseclass):
         self.pen_by_name = {} #{name: pen}
 
         color_list_loop = ['#F37021', '#46812B', '#67AE3E', '#4D4D4F'] # can be extend
-        dash_list_loop = [None, [16, 16], [8, 8], [4, 4]] # can be extend
+        dash_list_loop = [None, None, None, None] # can be extend
 
         for index, name in enumerate(self.all_names):
             color = color_list_loop[index%len(color_list_loop)] # loop color list
             dash = dash_list_loop[index//len(color_list_loop)%len(dash_list_loop)] # loop dash line list if same color
-            self.pen_by_name[name] = pg.mkPen(color = color, dash = dash, width = 2) # set to pen by name
+            self.pen_by_name[name] = pg.mkPen(color = color, dash = dash, width = 2.5) # set to pen by name
         
         return True
 
@@ -349,12 +372,17 @@ class MainWindow(uiclass, baseclass):
                 for data in csv.reader(f, delimiter = ','):
                     self.temp_data_by_name = self.addDataToDict(names, data, self.temp_data_by_name)
                 f.close()
-                self.plot_type = False
-                self.static_update_request = True
-                self.selected_data_by_file = True
-                self.selected_data_by_date = False
+                if self.temp_data_by_name['Date']:
+                    self.plot_type = False
+                    self.static_update_request = True
+                    self.selected_data_by_file = True
+                    self.selected_data_by_date = False
 
-                return True
+                    return True
+                else:
+                    self.warningText.appendPlainText('The selected file is empty.')
+
+                
             except:
                 self.warningText.appendPlainText('The selected file is invalid or compromised.')
 
