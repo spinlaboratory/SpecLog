@@ -11,6 +11,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def _escape_split(s, delim=",", escape="\\"):
     tokens = []
     previous_escape = False
@@ -50,7 +51,7 @@ def _kwarg_converter(s: str):
     return args, kwargs
 
 
-def _get_log_config(configname, key = None):
+def _get_log_config(configname, key=None):
     config = configparser.ConfigParser(
         converters={
             "list": lambda x: list(x.strip("[").strip("]").split(",")),
@@ -60,27 +61,25 @@ def _get_log_config(configname, key = None):
     # define three possible locations:
     log_current_config = Path.cwd() / configname
     log_home_config = Path.home() / configname
-    
-    log_cfg_folder = str(
-        Path(__file__).parent
-    )  # / configname #.with_name("config"))
+
+    log_cfg_folder = str(Path(__file__).parent)  # / configname #.with_name("config"))
 
     log_global_config = Path(log_cfg_folder) / configname
 
-    if key == 'public':
+    if key == "public":
         # copy command to public location
         # check if command location
-        log_public = 'C:/Users/Public/'
+        log_public = "C:/Users/Public/"
         list_dir = os.listdir(log_public)
-        log_dir = log_public + 'B12TLOG_Config'
-        if 'B12TLOG_Config' not in list_dir:
-            os.mkdir(log_dir) 
-        
-        log_public_config = log_dir + '/' + configname
+        log_dir = log_public + "B12TLOG_Config"
+        if "B12TLOG_Config" not in list_dir:
+            os.mkdir(log_dir)
+
+        log_public_config = log_dir + "/" + configname
 
         if configname not in os.listdir(log_dir):
-            shutil.copy(log_global_config, log_dir + '/' + configname)
-        
+            shutil.copy(log_global_config, log_dir + "/" + configname)
+
         config.read(log_public_config)
     else:
         config_read_list = [log_global_config, log_home_config, log_current_config]
@@ -90,4 +89,5 @@ def _get_log_config(configname, key = None):
 
     return config
 
-CONFIG = _get_log_config("config.cfg", key = 'public')
+
+CONFIG = _get_log_config("config.cfg", key="public")
