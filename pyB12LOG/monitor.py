@@ -803,7 +803,7 @@ class MainWindow(uiclass, baseclass):
                         + self.all_data_by_name["Time"][-1]
                     )
                     self.warning_status_by_name[name] = True
-                    string = current_time + ": " + name + " error!!!"
+                    string = current_time + ": " + name + " error."
                     self.warningText.appendPlainText(string)
 
                 elif (
@@ -815,7 +815,7 @@ class MainWindow(uiclass, baseclass):
                         + self.all_data_by_name["Time"][-1]
                     )
                     self.warning_status_by_name[name] = False
-                    string = current_time + ": " + name + " error clean!!!"
+                    string = current_time + ": " + name + " error clean."
                     self.warningText.appendPlainText(string)
 
     def clearWarning(self):
