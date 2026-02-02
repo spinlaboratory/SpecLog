@@ -1,2 +1,2 @@
-# pyB12LOG
+# pyLOG
 Python Package for Spectrometer Logging
