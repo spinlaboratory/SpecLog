@@ -5,7 +5,7 @@ SpecLog: read configurations, get available devices, send command and save retur
 
 Author: Yen-Chun Huang
 
-Company: Bridge 12 Technologies, Inc
+Company: Bruker BioSpin
 """
 
 from .device import *

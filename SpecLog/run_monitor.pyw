@@ -9,13 +9,13 @@ import argparse
 from .monitor import *
 
 def main_func():
-    parser = argparse.ArgumentParser(prog='pymonitor')
+    parser = argparse.ArgumentParser(prog='specmonitor')
     parser.add_argument('number_of_file', type=int, nargs='?', default = 10, 
                         help='To select number of files to plot in real-time')
     args = parser.parse_args()
     current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
     hashDict = Counter(current_exe) 
-    if 'pymonitor.exe' in hashDict and hashDict['pymonitor.exe'] > 1:
+    if 'specmonitor.exe' in hashDict and hashDict['specmonitor.exe'] > 1:
         exit()
     else:
         app = QApplication(sys.argv)
