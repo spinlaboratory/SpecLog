@@ -1,5 +1,5 @@
 """
-SpecLog: The logging program for instrumentations
+pyLOG: The logging program for instrumentations
 
 devices.py: connect instruments and show the availability of devices
 
@@ -119,6 +119,8 @@ class DEVICE:
                     self.debug_logger.info("%s is valid and connected" % name)
                 else:
                     self.debug_logger.info("%s is invalid" % name)
+                    self.debug_logger.warning("%s: Please check the connection of devices or their settings, please check the log for details" % name)
+                    print("%s: Please check the connection of devices or their settings, please check the log for details" % name)
 
     def _parity(self, parity):
         """
