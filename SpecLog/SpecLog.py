@@ -60,13 +60,13 @@ class SpecLog:
         if not self.last_query_time or now - self.last_query_time > self.delay:
             warning_level = 0
             self._setTimeInDataDictByVariable()  # update time
-            devices_info = (
-                self.devices.devices_info
+            device_info = (
+                self.devices.device_info
             )  # dictionary: {model: {status, config_status, device, id_command}}
             for name, info in self.commands.items():
                 delimiter = self.device_config[name]["delimiter"]
                 index = self.device_config[name]["index"]
-                device = devices_info[name]["device"]
+                device = device_info[name]["device"]
                 termination = self.device_config[name]["termination"]
                 for variable in info.keys():
                     info[variable]['min'], info[variable]['max'], info[variable]['static']
@@ -143,7 +143,7 @@ class SpecLog:
             if (
                 address in self.devices.deviceAddresses
                 and address not in self.available_addresses
-                and not self.devices.devices_info[name]["status"]
+                and not self.devices.device_info[name]["status"]
             ):
                 restart_DEVICE = True
 
