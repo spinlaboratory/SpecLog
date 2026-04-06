@@ -1,5 +1,5 @@
 """
-This is the python program to control pyB12logger 
+This is the python program to control SpecLog
 """
 
 import os
