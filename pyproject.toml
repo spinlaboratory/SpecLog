@@ -41,10 +41,7 @@ include-package-data = true
 include = ["SpecLog", "SpecLog.*"]
 
 [tool.setuptools.package-data]
-SpecLog = [
-  "config/command.cfg",
-  "ui/plotting.ui",
-]
+SpecLog = ["*.pyw", "config/*.cfg", "ui/*.ui"]
 
 [tool.setuptools.dynamic]
 version = { attr = "SpecLog.version.__version__" }
