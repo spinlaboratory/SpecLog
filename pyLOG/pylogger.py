@@ -1,5 +1,5 @@
 """
-This is the python program to control pylogger 
+This is the python program to control pyB12logger 
 """
 
 import os
@@ -11,15 +11,19 @@ from collections import Counter
 from .pyLOG import *
 
 # auto start and adding icon to desktop (public)
-startup_folder = os.path.normpath(
-    "C:/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp/"
+startup_folder = os.path.join(
+    os.environ["APPDATA"],
+    r"Microsoft\Windows\Start Menu\Programs\Startup"
 )
-desktop_folder = os.path.normpath("C:/Users/Public/Desktop/")
-source_running_logger = (
-    os.path.dirname(sys.executable) + "/scripts/pylogger_running.exe"
-)
-source_monitor = os.path.dirname(sys.executable) + "/scripts/pymonitor.exe"
+desktop_folder = os.path.join(os.environ["USERPROFILE"], "Desktop")
 
+source_running_logger = os.path.join(
+    os.path.dirname(sys.executable), "scripts", "pylogger_running.exe"
+)
+
+source_monitor = os.path.join(
+    os.path.dirname(sys.executable), "scripts", "pymonitor.exe"
+)
 
 def main_func():
     parser = argparse.ArgumentParser(prog="pylogger")
@@ -55,8 +59,9 @@ def main_func():
     args = parser.parse_args()
 
     if args.startup == "True":
-        if not os.path.exists(startup_folder + "/pylogger_running.exe"):
-            shutil.copy(source_running_logger, startup_folder)
+        target = os.path.join(startup_folder, "pylogger_running.exe")
+        if not os.path.exists(target):
+            shutil.copy(source_running_logger, target)
             print("pylogger will run on startup.")
     elif args.startup == "False":
         if not os.path.exists(startup_folder + "/pylogger_running.exe"):
@@ -67,15 +72,18 @@ def main_func():
             print("pylogger will not run on startup.")
 
     if args.desktop == "True":
-        if not os.path.exists(desktop_folder + "/pylogger_running.exe"):
-            shutil.copy(source_running_logger, desktop_folder)
+        target_logger = os.path.join(desktop_folder, "pylogger_running.exe")
+        target_monitor = os.path.join(desktop_folder, "pymonitor.exe")
+
+        if not os.path.exists(target_logger):
+            shutil.copy(source_running_logger, target_logger)
             print("Create pylogger_running.exe on the desktop.")
         else:
             print("pylogger_running.exe is on desktop already.")
 
-        if not os.path.exists(desktop_folder + "/pymonitor.exe"):
-            shutil.copy(source_monitor, desktop_folder)
-            print("Create pymonitor_running.exe on the desktop.")
+        if not os.path.exists(target_monitor):
+            shutil.copy(source_monitor, target_monitor)
+            print("Create pymonitor.exe on the desktop.")
         else:
             print("pymonitor.exe is on desktop already.")
 
