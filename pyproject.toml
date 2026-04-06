@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SpecLog"
+dynamic = ["version"]
+description = "A Python Package for logging data from instrumentations"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Yen-Chun Huang", email = "yen-chun.huang@bruker.com" }
+]
+license = "MIT"
+license-files = ["LICENSE", "LICENSE.txt"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: Microsoft :: Windows",
+]
+dependencies = [
+  "matplotlib >= 3.7.1",
+  "numpy >= 1.24.3",
+  "PySide6 >= 6.9.0",
+  "pyqtgraph >= 0.13.3",
+  "spinlab >= 1.1.3",
+  "pyserial >= 3.5",
+]
+
+[project.gui-scripts]
+SpecMonitor = "SpecLog.run_monitor:main_func"
+
+[project.scripts]
+SpecLogger = "SpecLog.SpecLogger:main_func"
+SpecMonitor_debug = "SpecLog.run_monitor:main_func"
+SpecLogger_running = "SpecLog.run_logger:main_func"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["SpecLog", "SpecLog.*"]
+
+[tool.setuptools.package-data]
+SpecLog = [
+  "config/command.cfg",
+  "ui/plotting.ui",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "SpecLog.version.__version__" }

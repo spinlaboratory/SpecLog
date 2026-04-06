@@ -1,4 +1,4 @@
-from .pyLOG import *
+from .SpecLog import *
 from .device import *
 from .monitor import *
 from .version import *

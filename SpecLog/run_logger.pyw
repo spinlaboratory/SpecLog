@@ -8,7 +8,7 @@ import ctypes
 import time
 import threading
 from collections import Counter
-from .pyLOG import *
+from .SpecLog import *
 from .debugLog import *
 
 
@@ -26,18 +26,18 @@ def main_func(config_file = None):
     current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
     hashDict = Counter(current_exe) 
     # thread = threading.Thread(target=popout, args=(0))
-    if 'pylogger_running.exe' in hashDict and hashDict['pylogger_running.exe'] > 1:
-        debugLogger.warning('start fail: pylogger is running in the background')
+    if 'SpecLogger_running.exe' in hashDict and hashDict['SpecLogger_running.exe'] > 1:
+        debugLogger.warning('start fail: SpecLogger is running in the background')
         return 
     else:
         try:
-            log = pyLOG()
-            debugLogger.info('pyLOG initialization succeed')
+            log = SpecLog()
+            debugLogger.info('SpecLog initialization succeed')
         except Exception as err:
-            debugLogger.warning('pyLOG initialization failed')
+            debugLogger.warning('SpecLog initialization failed')
             debugLogger.error(traceback.format_exc())
             return
-        debugLogger.info('pyLOG logging started')
+        debugLogger.info('SpecLog logging started')
         while(1):
             try:
                 log.log()

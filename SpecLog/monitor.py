@@ -788,12 +788,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             .replace(" ", "")
             .split("\n\n")
         )
-        logger_status_change = ("pylogger_running.exe" in current_exe) != (self.indicator_dictionary["Logger"].styleSheet() == self.status[True])
+        logger_status_change = ("SpecLogger_running.exe" in current_exe) != (self.indicator_dictionary["Logger"].styleSheet() == self.status[True])
         if logger_status_change:
-            self.indicator_dictionary["Logger"].setStyleSheet(self.status["pylogger_running.exe" in current_exe])
+            self.indicator_dictionary["Logger"].setStyleSheet(self.status["SpecLogger_running.exe" in current_exe])
 
         for device in self.device_config:
-            if "pylogger_running.exe" in current_exe:
+            if "SpecLogger_running.exe" in current_exe:
                 change_detected = self.device_config[device]["device_status"] != (self.indicator_dictionary[device].styleSheet() == self.status[True])
                 if change_detected:
                     self.indicator_dictionary[device].setStyleSheet(self.status[self.device_config[device]["device_status"]])
