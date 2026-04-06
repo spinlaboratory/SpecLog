@@ -8,7 +8,7 @@ import argparse
 import shutil
 import subprocess
 from collections import Counter
-from .pyLOG import *
+from .SpecLog import *
 
 # auto start and adding icon to desktop (public)
 startup_folder = os.path.join(
@@ -18,7 +18,7 @@ startup_folder = os.path.join(
 desktop_folder = os.path.join(os.environ["USERPROFILE"], "Desktop")
 
 source_running_logger = os.path.join(
-    os.path.dirname(sys.executable), "scripts", "pylogger_running.exe"
+    os.path.dirname(sys.executable), "scripts", "SpecLogger_running.exe"
 )
 
 source_monitor = os.path.join(
@@ -26,14 +26,14 @@ source_monitor = os.path.join(
 )
 
 def main_func():
-    parser = argparse.ArgumentParser(prog="pylogger")
+    parser = argparse.ArgumentParser(prog="SpecLogger")
     parser.add_argument(
         "status",
         type=str,
         nargs="?",
         default=None,
         choices=["start", "stop"],
-        help="To start/stop pylogger. If no argument, the pylogger will start by default",
+        help="To start/stop SpecLogger. If no argument, the SpecLogger will start by default",
     )
     parser.add_argument(
         "-desktop",
@@ -47,39 +47,39 @@ def main_func():
         type=str,
         default=None,
         choices=["True", "False"],
-        help="To enable/disable pylogger at startup.",
+        help="To enable/disable SpecLogger at startup.",
     )
     parser.add_argument(
         "-debug",
         type=str,
         default="False",
         choices=["True", "False"],
-        help="To start debug console pylogger.",
+        help="To start debug console SpecLogger.",
     )
     args = parser.parse_args()
 
     if args.startup == "True":
-        target = os.path.join(startup_folder, "pylogger_running.exe")
+        target = os.path.join(startup_folder, "SpecLogger_running.exe")
         if not os.path.exists(target):
             shutil.copy(source_running_logger, target)
-            print("pylogger will run on startup.")
+            print("SpecLogger will run on startup.")
     elif args.startup == "False":
-        if not os.path.exists(startup_folder + "/pylogger_running.exe"):
-            print(startup_folder + "pylogger_running.exe")
-            print("pylogger does not run on startup.")
+        if not os.path.exists(startup_folder + "/SpecLogger_running.exe"):
+            print(startup_folder + "SpecLogger_running.exe")
+            print("SpecLogger does not run on startup.")
         else:
-            os.remove(startup_folder + "/pylogger_running.exe")
-            print("pylogger will not run on startup.")
+            os.remove(startup_folder + "/SpecLogger_running.exe")
+            print("SpecLogger will not run on startup.")
 
     if args.desktop == "True":
-        target_logger = os.path.join(desktop_folder, "pylogger_running.exe")
+        target_logger = os.path.join(desktop_folder, "SpecLogger_running.exe")
         target_monitor = os.path.join(desktop_folder, "pymonitor.exe")
 
         if not os.path.exists(target_logger):
             shutil.copy(source_running_logger, target_logger)
-            print("Create pylogger_running.exe on the desktop.")
+            print("Create SpecLogger_running.exe on the desktop.")
         else:
-            print("pylogger_running.exe is on desktop already.")
+            print("SpecLogger_running.exe is on desktop already.")
 
         if not os.path.exists(target_monitor):
             shutil.copy(source_monitor, target_monitor)
@@ -101,25 +101,25 @@ def main_func():
         hashDict = Counter(current_exe)
 
         if (
-            "pylogger_running.exe" in hashDict
-            and hashDict["pylogger_running.exe"] > 0
+            "SpecLogger_running.exe" in hashDict
+            and hashDict["SpecLogger_running.exe"] > 0
         ):
-            print("pylogger has started already.")
+            print("SpecLogger has started already.")
             return
 
         else:
             if args.debug == "False":
                 subprocess.Popen(
-                    "pylogger_running.exe", creationflags=subprocess.CREATE_NO_WINDOW
+                    "SpecLogger_running.exe", creationflags=subprocess.CREATE_NO_WINDOW
                 )
-                print("pylogger started")
+                print("SpecLogger started")
             elif args.debug == "True":
-                os.startfile("pylogger_running.exe")
-                print("pylogger debug mode started")
+                os.startfile("SpecLogger_running.exe")
+                print("SpecLogger debug mode started")
 
     elif args.status == "stop":
-        os.system("taskkill /im pylogger_running.exe /F /t")
-        print("pylogger stopped")
+        os.system("taskkill /im SpecLogger_running.exe /F /t")
+        print("SpecLogger stopped")
     else:  # ignore
         return
 

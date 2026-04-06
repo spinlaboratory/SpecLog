@@ -1,5 +1,5 @@
 """
-pyLOG: The logging program for instrumentations
+SpecLog: The logging program for instrumentations
 
 devices.py: connect instruments and show the availability of devices
 

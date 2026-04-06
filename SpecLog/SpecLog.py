@@ -1,7 +1,7 @@
 """
-pyLOG: The logging program for instrumentations
+SpecLog: The logging program for instrumentations
 
-pyLOG: read configurations, get available devices, send command and save return.
+SpecLog: read configurations, get available devices, send command and save return.
 
 Author: Yen-Chun Huang
 
@@ -16,7 +16,7 @@ from .loggerConfig import *
 from .debugLog import *
 
 
-class pyLOG:
+class SpecLog:
     def __init__(self, config_file: str = None):
         self.config = loggerConfig(config_file)
         self.debugLogger = debugLog(config_file).logger
@@ -274,4 +274,4 @@ class pyLOG:
         return True
 
 # if __name__ == '__main__':
-#     pyLOG()
+#     SpecLog()
