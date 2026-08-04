@@ -17,7 +17,7 @@ from .debugLog import *
 
 
 class SpecLog:
-    def __init__(self, config_file: str = None):
+    def __init__(self, config_file: str = None, protocols=None):
         self.config = loggerConfig(config_file)
         self.debugLogger = debugLog(config_file).logger
         self.settings = self.config.settings
@@ -25,6 +25,7 @@ class SpecLog:
             self.config.commands
         )  # dictionary {model: {variable: {command, alias, min, max, static}}}
         self.device_config = self.config.devices
+        self.protocols = protocols
 
         self.log_dir = self.settings["log_folder_location"] + "/LOG/"
         self._checkDirectory()
@@ -66,8 +67,6 @@ class SpecLog:
             for name, info in self.commands.items():
                 delimiter = self.device_config[name]["delimiter"]
                 index = self.device_config[name]["index"]
-                device = device_info[name]["device"]
-                termination = self.device_config[name]["termination"]
                 for variable in info.keys():
                     info[variable]['min'], info[variable]['max'], info[variable]['static']
                     if self.devices.checkDeviceStatus(
@@ -75,13 +74,12 @@ class SpecLog:
                     ):  # check the connection of a device
                         try:
                             command = info[variable]["command"]
-                            device.write((command+termination).encode())  # send command to device
-                            data_string = device.read_until(termination.encode()).decode()
+                            data_string = self.devices.query(name, command)
                             data = self._returnStringConverter(
                                 data_string, delimiter, index
                             )
                         except Exception as err:
-                            self.devices.device_info["status"] = False
+                            self.debugLogger.error(err)
                             data = "nan"
                    
                     else:
@@ -92,22 +90,25 @@ class SpecLog:
                     if data == "nan":
                         warning_level = 2
 
-                    elif info[variable]['static'] and float(data) != info[variable]['static']:
+                    elif (
+                        info[variable]['static'] is not None
+                        and float(data) != info[variable]['static']
+                    ):
                         warning_level = 2
                     
                     else:
-                        if info[variable]['min']:
-                            if float(data) <= info[variable]['min'] * 1.05:
-                                warning_level = max(warning_level, 1)
-                            elif float(data) < info[variable]['min']:
+                        if info[variable]['min'] is not None:
+                            if float(data) < info[variable]['min']:
                                 warning_level = 2
+                            elif float(data) <= info[variable]['min'] * 1.05:
+                                warning_level = max(warning_level, 1)
                                 
 
-                        if info[variable]['max']:
-                            if float(data) >= info[variable]['max'] * 0.95:
-                                warning_level = max(warning_level, 1)
-                            elif float(data) > info[variable]['max']:
+                        if info[variable]['max'] is not None:
+                            if float(data) > info[variable]['max']:
                                 warning_level = 2
+                            elif float(data) >= info[variable]['max'] * 0.95:
+                                warning_level = max(warning_level, 1)
                     self.warning = warning_level
 
             self.last_query_time = now
@@ -122,37 +123,18 @@ class SpecLog:
         """
         Call DEVICE
         """
-        self.devices = DEVICE(self.config, self.debugLogger)  # establish communication
+        self.devices = DEVICE(
+            self.config, self.debugLogger, protocols=self.protocols
+        )  # establish communication
         self.devices._getPorts()
         self.available_addresses = self.devices.deviceAddresses
         return True
 
     def reconnectDevices(self):
-        restart_DEVICE = False
-        self.devices._getPorts()
-        for name in self.device_config.keys():
-            address = self.device_config[name]["address"]
+        return self.devices.reconnectDevices()
 
-            if (
-                address not in self.devices.deviceAddresses
-                and address in self.available_addresses
-            ):  # when a connection is loss
-                # This step is to prevent the moment when the device is shown in the resource manager but connection fails
-                self.available_addresses.remove(address)
-
-            if (
-                address in self.devices.deviceAddresses
-                and address not in self.available_addresses
-                and not self.devices.device_info[name]["status"]
-            ):
-                restart_DEVICE = True
-
-        if restart_DEVICE:
-            del self.devices  # delete the DEVICE class
-            return self.connectDevices()
-
-        else:
-            return False
+    def close(self):
+        self.devices.close()
 
     def _checkDirectory(self):
         if not os.path.exists(self.log_dir):
@@ -249,6 +231,7 @@ class SpecLog:
         Returns:
             data (string): return data in str
         """
+        data = "nan"
         try:
             if delimiter:
                 data = string.split(delimiter)[index]
@@ -259,7 +242,7 @@ class SpecLog:
             data = data.replace("\t", "") 
             data = data.replace("\r", "") 
             data = data.strip()
-        except:
+        except (IndexError, AttributeError):
             self.debugLogger.error("String Convert Fail: recived: %s, delimiter: %s, index: %s" %(string, delimiter, index))
         return data
 

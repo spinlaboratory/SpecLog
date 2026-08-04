@@ -22,7 +22,7 @@ source_running_logger = os.path.join(
 )
 
 source_monitor = os.path.join(
-    os.path.dirname(sys.executable), "scripts", "pymonitor.exe"
+    os.path.dirname(sys.executable), "scripts", "SpecMonitor_running.exe"
 )
 
 def main_func():
@@ -73,7 +73,7 @@ def main_func():
 
     if args.desktop == "True":
         target_logger = os.path.join(desktop_folder, "SpecLogger_running.exe")
-        target_monitor = os.path.join(desktop_folder, "pymonitor.exe")
+        target_monitor = os.path.join(desktop_folder, "SpecMonitor.exe")
 
         if not os.path.exists(target_logger):
             shutil.copy(source_running_logger, target_logger)
@@ -83,9 +83,9 @@ def main_func():
 
         if not os.path.exists(target_monitor):
             shutil.copy(source_monitor, target_monitor)
-            print("Create pymonitor.exe on the desktop.")
+            print("Create SpecMonitor.exe on the desktop.")
         else:
-            print("pymonitor.exe is on desktop already.")
+            print("SpecMonitor.exe is on desktop already.")
 
     if not args.startup and not args.desktop and not args.status:  # not arguments
         args.status = "start"

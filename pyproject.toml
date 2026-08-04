@@ -12,7 +12,7 @@ authors = [
   { name = "Yen-Chun Huang", email = "yen-chun.huang@bruker.com" }
 ]
 license = "MIT"
-license-files = ["LICENSE", "LICENSE.txt"]
+license-files = ["LICENSE"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: Microsoft :: Windows",
@@ -27,11 +27,11 @@ dependencies = [
 ]
 
 [project.gui-scripts]
-SpecMonitor = "SpecLog.run_monitor:main_func"
+SpecMonitor_running = "SpecLog.run_monitor:main_func"
 
 [project.scripts]
 SpecLogger = "SpecLog.SpecLogger:main_func"
-SpecMonitor_debug = "SpecLog.run_monitor:main_func"
+SpecMonitor = "SpecLog.SpecMonitor:main_func"
 SpecLogger_running = "SpecLog.run_logger:main_func"
 
 [tool.setuptools]

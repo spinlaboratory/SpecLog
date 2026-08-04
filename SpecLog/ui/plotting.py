@@ -270,7 +270,7 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"pyMonitor", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"SpecMonitor", None))
         self.loadFile.setText(QCoreApplication.translate("MainWindow", u"Load File", None))
         self.groupBox_6.setTitle(QCoreApplication.translate("MainWindow", u"Status", None))
         self.groupBox.setTitle(QCoreApplication.translate("MainWindow", u"Data Selection - format: yyyymmddHHMM", None))
@@ -289,7 +289,7 @@ class Ui_MainWindow(object):
         self.clearWarningText.setText(QCoreApplication.translate("MainWindow", u"Clear", None))
         self.groupBox_5.setTitle(QCoreApplication.translate("MainWindow", u"Monitor Settings", None))
         self.label_8.setText(QCoreApplication.translate("MainWindow", u"Window Length", None))
-        self.label.setText(QCoreApplication.translate("MainWindow", u"PyMonitor", None))
+        self.label.setText(QCoreApplication.translate("MainWindow", u"SpecMonitor", None))
         self.groupBox_3.setTitle("")
         self.systemStatus.setText(QCoreApplication.translate("MainWindow", u"System Status", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))

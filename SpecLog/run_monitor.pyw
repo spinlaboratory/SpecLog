@@ -4,22 +4,34 @@ This is the python program to run monitor only
 
 import os
 import sys
-from collections import Counter
+import ctypes
 import argparse
 from .monitor import *
 
-def main_func():
-    parser = argparse.ArgumentParser(prog='specmonitor')
+_monitor_mutex = None
+
+
+def _another_monitor_is_running():
+    """Use a Windows named mutex instead of repeatedly querying processes."""
+    global _monitor_mutex
+    if os.name != "nt":
+        return False
+    _monitor_mutex = ctypes.windll.kernel32.CreateMutexW(
+        None, False, "Local\\SpecLog.SpecMonitor"
+    )
+    return ctypes.windll.kernel32.GetLastError() == 183
+
+def main_func(argv=None):
+    parser = argparse.ArgumentParser(prog='SpecMonitor')
     parser.add_argument('number_of_file', type=int, nargs='?', default = 10, 
                         help='To select number of files to plot in real-time')
-    args = parser.parse_args()
-    current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
-    hashDict = Counter(current_exe) 
-    if 'specmonitor.exe' in hashDict and hashDict['specmonitor.exe'] > 1:
-        exit()
+    args = parser.parse_args(argv)
+    if _another_monitor_is_running():
+        return
     else:
-        app = QApplication(sys.argv)
-        window = MainWindow()
+        qt_args = [sys.argv[0], *(argv if argv is not None else sys.argv[1:])]
+        app = QApplication(qt_args)
+        window = MainWindow(number_of_files=max(1, args.number_of_file))
         window.show()
         app.exec()
 

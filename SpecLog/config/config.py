@@ -69,16 +69,12 @@ def _get_log_config(configname, key=None):
     if key == "public":
         # copy command to public location
         # check if command location
-        log_public = "C:/Users/Public/"
-        list_dir = os.listdir(log_public)
-        log_dir = log_public + "LOG_Config"
-        if "LOG_Config" not in list_dir:
-            os.mkdir(log_dir)
+        log_dir = Path("C:/Users/Public/LOG_Config")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_public_config = log_dir / configname
 
-        log_public_config = log_dir + "/" + configname
-
-        if configname not in os.listdir(log_dir):
-            shutil.copy(log_global_config, log_dir + "/" + configname)
+        if not log_public_config.exists():
+            shutil.copy(log_global_config, log_public_config)
 
         config.read(log_public_config)
     else:
@@ -90,4 +86,6 @@ def _get_log_config(configname, key=None):
     return config
 
 
-CONFIG = _get_log_config("config.cfg", key="public")
+# Loading the package must not create or modify files. The public, editable
+# configuration is created only when loggerConfig is actually instantiated.
+CONFIG = _get_log_config("config.cfg")

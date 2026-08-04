@@ -11,6 +11,18 @@ from collections import Counter
 from .SpecLog import *
 from .debugLog import *
 
+_logger_mutex = None
+
+
+def _another_logger_is_running():
+    global _logger_mutex
+    if os.name != "nt":
+        return False
+    _logger_mutex = ctypes.windll.kernel32.CreateMutexW(
+        None, False, "Local\\SpecLog.SpecLogger"
+    )
+    return ctypes.windll.kernel32.GetLastError() == 183
+
 
 def popout(level = 0):
     if level == 0:
@@ -23,24 +35,25 @@ def popout(level = 0):
 def main_func(config_file = None):
     # last_warning = 0
     debugLogger = debugLog(config_file).logger
-    current_exe = os.popen('wmic process get description').read().strip().replace(' ', '').split('\n\n')
-    hashDict = Counter(current_exe) 
     # thread = threading.Thread(target=popout, args=(0))
-    if 'SpecLogger_running.exe' in hashDict and hashDict['SpecLogger_running.exe'] > 1:
+    if _another_logger_is_running():
         debugLogger.warning('start fail: SpecLogger is running in the background')
         return 
     else:
         try:
-            log = SpecLog()
+            log = SpecLog(config_file)
             debugLogger.info('SpecLog initialization succeed')
         except Exception as err:
             debugLogger.warning('SpecLog initialization failed')
             debugLogger.error(traceback.format_exc())
             return
         debugLogger.info('SpecLog logging started')
-        while(1):
-            try:
+        try:
+            while(1):
                 log.log()
+                # Avoid a tight loop that continuously rescans serial ports
+                # between configured logging intervals.
+                time.sleep(max(0.1, log.delay))
                 # warning = log.warning
                 # if last_warning != warning:
                 #     if warning == 0 and thread.is_alive: # error clean
@@ -55,10 +68,11 @@ def main_func(config_file = None):
                         
                 #     last_warning = warning                     
 
-            except Exception as err:
-                debugLogger.warning('logging failed')
-                debugLogger.critical(traceback.format_exc())                    
-                return 
+        except Exception as err:
+            debugLogger.warning('logging failed')
+            debugLogger.critical(traceback.format_exc())
+        finally:
+            log.close()
                 
 if __name__ == "__main__":
     main_func()

@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>pyMonitor</string>
+   <string>SpecMonitor</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout_2">
@@ -445,7 +445,7 @@
        </font>
       </property>
       <property name="text">
-       <string>PyMonitor</string>
+       <string>SpecMonitor</string>
       </property>
       <property name="textFormat">
        <enum>Qt::PlainText</enum>
