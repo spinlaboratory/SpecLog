@@ -16,7 +16,7 @@ from .debugLog import *
 
 class DEVICE:
     def __init__(self, config, debug_logger):
-        self.devices_info = {}
+        self.device_info = {}
         self._getPorts()
         self.debug_logger = debug_logger
         self.device_config = config.devices
@@ -71,7 +71,7 @@ class DEVICE:
             else:
                 device = None
 
-            self.devices_info[name] = {
+            self.device_info[name] = {
                 "status": status,
                 "config_status": status,
                 "device": device,
@@ -81,13 +81,13 @@ class DEVICE:
             return True
 
         else:
-            self.devices_info = {}
+            self.device_info = {}
             for name in self.device_config.keys():
                 self._setDevice(name)
 
     def checkDeviceStatus(self, name: str = None, init: bool = False):
         if name:
-            device_info = self.devices_info[name]
+            device_info = self.device_info[name]
             id_command = device_info["id_command"]
             device = device_info["device"]
             termination = device_info["termination"]
@@ -114,7 +114,7 @@ class DEVICE:
                 return False
 
         else:
-            for name in self.devices_info.keys():
+            for name in self.device_info.keys():
                 if self.checkDeviceStatus(name):
                     self.debug_logger.info("%s is valid and connected" % name)
                 else:
