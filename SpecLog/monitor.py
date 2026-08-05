@@ -18,31 +18,111 @@ Company: Bridge 12 Technologies, Inc
 
 import os
 import csv
-from datetime import datetime
+from pathlib import Path
+import re
+import threading
+import time as _time
+from datetime import datetime, timezone
 import numpy as _np
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QVBoxLayout, QCheckBox
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QVBoxLayout,
+    QCheckBox,
+    QSizePolicy,
+)
 from PySide6 import QtCore
 import pyqtgraph as pg 
 from .ui.plotting import Ui_MainWindow
 from .loggerConfig import *
 from .debugLog import *
+from .logger_status import has_recent_log_activity, is_logger_running
+from .history import HistoryCache
 
 red = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:red;\nborder:2px solid white;\n}\n"
-green = "QCheckBox::indiator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:green;\nborder:2pcx solid white;\n}\n"
+green = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:green;\nborder:2px solid white;\n}\n"
+
+
+class MonitorDateAxisItem(pg.DateAxisItem):
+    """Adaptive date axis whose time labels always retain the date."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # DateAxisItem estimates density from short, time-only examples. Our
+        # two-line labels are wider, so use their real worst-case footprint.
+        for zoom_level in self.zoomLevels.values():
+            zoom_level.exampleText = "2026-08-05\n23:59"
+        # Permit centered labels near the left and right edges to extend into
+        # the plot margins instead of suppressing both labels on narrow views.
+        self.setStyle(hideOverlappingLabels=70)
+
+    def tickStrings(self, values, scale, spacing):
+        labels = []
+        for value in values:
+            try:
+                date_time = datetime.fromtimestamp(value, timezone.utc)
+                if spacing < 1:
+                    label = date_time.strftime("%Y-%m-%d\n%H:%M:%S.%f")[:-3]
+                elif spacing < 60:
+                    label = date_time.strftime("%Y-%m-%d\n%H:%M:%S")
+                elif spacing < 24 * 60 * 60:
+                    label = date_time.strftime("%Y-%m-%d\n%H:%M")
+                else:
+                    label = date_time.strftime("%Y-%m-%d")
+            except (OverflowError, OSError, ValueError):
+                label = ""
+            labels.append(label)
+        return labels
+
+    def tickValues(self, minVal, maxVal, size):
+        levels = super().tickValues(minVal, maxVal, size)
+        if any(values for _spacing, values in levels) or maxVal <= minVal:
+            return levels
+        # PyQtGraph may return no ticks when a narrow axis cannot fit its
+        # preferred calendar interval. Always retain one centered reference.
+        spacing = maxVal - minVal
+        return [(spacing, [(minVal + maxVal) / 2])]
 
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self, config_file: str = None):
+    historyLoaded = QtCore.Signal(object)
+    historyFailed = QtCore.Signal(str)
+
+    def __init__(self, config_file: str = None, number_of_files: int = 10):
         super().__init__()
         self.setupUi(self)
+        self.groupBox_4.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.groupBox_3.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.gridLayout_2.setColumnStretch(1, 1)
+        self.gridLayout_2.setColumnStretch(2, 1)
 
         # configuration file
         config = loggerConfig(config_file)
         self.settings = config.settings
         self.limit_hours = int(self.settings['limit_hours'])
+        self.log_interval = max(1, int(self.settings["log_interval"]))
         self.device_config = config.devices
         self.file_dir = self.settings["log_folder_location"] + "/LOG/"
         self.commands = config.commands
+        self.number_of_files = max(1, number_of_files)
+        os.makedirs(self.file_dir, exist_ok=True)
+        self.current_file = None
+        self.f = None
+        self.names = []
+        self.latest_data = None
+        self._logger_running = False
+        self._last_process_check = 0.0
+        self._history_loading = False
+        self.history_cache = HistoryCache(
+            os.path.join(self.file_dir, "monitor_cache.sqlite")
+        )
+        self.historyLoaded.connect(self._history_loaded)
+        self.historyFailed.connect(self._history_failed)
         self.getAlias()
         self.getCommandInfoByName()
         self.status_string = ""
@@ -84,10 +164,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.timer = QtCore.QTimer()
         self.timer.setInterval(300)
-        self.timer.timeout.connect(self.setStatus)
-        self.timer.timeout.connect(self.printWarning)
         self.timer.timeout.connect(self.updateFiles)
         self.timer.timeout.connect(self.updateData)
+        self.timer.timeout.connect(self.setStatus)
+        self.timer.timeout.connect(self.printWarning)
         self.timer.timeout.connect(self.plot)
         self.timer.start()
 
@@ -96,27 +176,48 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         Get files from directory
         """
-        self.all_file_list = [
-            file for file in os.listdir(self.file_dir) if "log_" in file and '.csv' in file
-        ]
-        self.file_list = self.all_file_list[-3:]
+        self.all_file_list = sorted(
+            file
+            for file in os.listdir(self.file_dir)
+            if file.startswith("log_") and file.endswith(".csv")
+        )
+        self.file_list = self.all_file_list[-self.number_of_files :]
         return True
 
     def updateFiles(self):
         """
         update files from directory
         """
-        file = list(os.listdir(self.file_dir))[-1]
-        if file != self.all_file_list[-1]:
-            # check if file format is correct
-            if "log_" in file and '.csv' in file:
-                self.all_file_list.append(file)
-                self.file_list = self.file_list[1:]
-                self.file_list.append(file)
-                return True
-
-        else:
+        files = sorted(
+            file
+            for file in os.listdir(self.file_dir)
+            if file.startswith("log_") and file.endswith(".csv")
+        )
+        if files == self.all_file_list:
             return False
+
+        self.all_file_list = files
+        self.file_list = files[-self.number_of_files :]
+        self.getData()
+        self.getPenByName()
+        for name in self.all_names:
+            if name not in self.line_by_name:
+                self.line_by_name[name] = self.graphWidget.plot(
+                    [], [], name=name, pen=self.pen_by_name[name]
+                )
+            if name not in self.warning_level_by_name:
+                self.warning_level_by_name[name] = 0
+            if (
+                name not in self.hidden_list
+                and name not in self.shown_list
+                and name not in self.ignore_list
+            ):
+                if self.command_info_by_name.get(name, [None] * 4)[3]:
+                    self.ignore_list.append(name)
+                else:
+                    self.hidden_list.append(name)
+                    self.hiddenListWidget.addItem(name)
+        return True
 
     ### ======================================================= Data Dictionary =======================================================
     def getData(self):
@@ -124,17 +225,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Get data from logger files when monitor starts. It is not used for updating data reading
         """
         self.all_data_by_name = {"Date": [], "Time": [], "Seconds": []}
+        self.latest_data = None
         window_length = self.windowLength.value()
 
         if not self.file_list:
-            self.debugLogger.error("Logged Data Not Found")
-            return False
+            if self.f is not None:
+                self.f.close()
+            self.f = None
+            self.current_file = None
+            self.names = []
+            self.all_names = []
+            self.all_x = self.all_data_by_name["Seconds"]
+            self.data_by_name = {}
+            self.x = []
+            self.window_length = window_length
+            self.debugLogger.warning("Logged data not found; waiting for logger")
+            return True
+
+        if self.f is not None:
+            self.f.close()
+            self.f = None
 
         # When the monitor starts or a new file presents
         for file in self.file_list:
-            f = open(self.file_dir + file, "r")
+            f = open(os.path.join(self.file_dir, file), "r", newline="")
             names = f.readline().strip("\n").split(",")
-            print(names)
             if names[0]:
                 names = self.convertNames(
                     names
@@ -166,9 +281,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 if name not in ["Date", "Time", "Seconds"]
             }
             self.x = self.all_x[-1 * window_length :]
-            self.x_ticks = self.getXTicks(
-                self.x, self.all_data_by_name["Time"][-1 * window_length :]
-            )
 
     def updateData(self):
         """
@@ -177,15 +289,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         This is the data checking processing and used for live data
         """
 
+        if not self.file_list or self.f is None:
+            return False
+
         if self.current_file != self.file_list[-1]:
             self.f.close()  # when new file exist, close the previous file
             self.current_file = self.file_list[-1]
-            self.f = open(self.file_dir + self.current_file, "r")
+            self.f = open(os.path.join(self.file_dir, self.current_file), "r", newline="")
             self.names = self.f.readline().strip("\n").split(",")
             self.names = self.convertNames(self.names)  # convert names list from alias
 
         self.line = self.f.readline().strip("\n")
-        self.latest_data = None
         if self.line:
             self.all_data_by_name = self.updateDataToDict(
                 self.names, self.line.strip("\n").split(",") , self.all_data_by_name, self.limit_hours
@@ -216,9 +330,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if name not in ["Date", "Time"]
         }
         self.x = self.all_x[-1 * window_length :]
-        self.x_ticks = self.getXTicks(
-            self.x, self.all_data_by_name["Time"][-1 * window_length :]
-        )
 
         return self.plot_type
 
@@ -235,9 +346,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         if name not in ["Date", "Time"]
                     }
                     self.x = self.all_x[index[0] : index[1]]
-                    self.x_ticks = self.getXTicks(
-                        self.x, self.all_data_by_name["Time"][index[0] : index[1]]
-                    )
                     self.static_update_request = (
                         False  # just update the static figure once
                     )
@@ -251,7 +359,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     if name not in ["Date", "Time"]
                 }
                 self.x = self.temp_data_by_name["Seconds"]
-                self.x_ticks = self.getXTicks(self.x, self.temp_data_by_name["Time"])
                 self.static_update_request = False  # just update the static figure once
 
         return self.plot_type
@@ -273,6 +380,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # convert name from alias:
         # temporary dictionary
         td = {name.strip(): val.strip() for name, val in zip(names, data)}
+        if "Date" not in td or "Time" not in td:
+            self.debugLogger.warning("Ignoring incomplete log row: %r", data)
+            return d
 
         # remove the overtime data if necessary
         # if hours > 0:
@@ -293,10 +403,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             elif name == "Seconds":
                 td[name] = self.getXAxisFromTime(td["Date"].strip(), td["Time"].strip())
             elif name in td and td[name] != "nan":
-                if self.command_info_by_name[name][3]:
-                    td[name] = str(td[name])
-                else:
-                    td[name] = float(td[name])
+                try:
+                    if self.command_info_by_name.get(name, [None] * 4)[3]:
+                        td[name] = str(td[name])
+                    else:
+                        td[name] = float(td[name])
+                except (TypeError, ValueError):
+                    td[name] = _np.nan
             elif name:
                 td[name] = _np.nan
             
@@ -326,61 +439,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         return int(delta.total_seconds())
 
-    def getXTicks(self, seconds: list, time: list, ticks_number: int = 10):
-        """
-        Get less dense X ticks from x list and time list
-
-        Args:
-            seconds (list): the list of seconds in integer
-            time (list): the list of time in string
-            ticks_number (int): the number of ticks in plotting
-
-        Returns:
-            x_ticks (list): the list of tuple in format (seconds: time)
-
-        """
-        # if not len(seconds) or len(seconds) != len(time):
-        #     return False
-
-        # if len(seconds) <= ticks_number:
-        #     x_ticks = [(seconds[i], time[i]) for i in range(len(seconds))]
-
-        # else:
-        #     x_ticks = [
-        #         (seconds[i], time[i])
-        #         for i in _np.linspace(0, len(seconds) - 1, ticks_number, dtype=int)
-        #     ]
-        time = []
-
-        for i in range(len(seconds)):
-            time.append(datetime.utcfromtimestamp(seconds[i]).strftime("%Y-%m-%d\n%H:%M:%S"))
-            
-        if len(seconds) <= ticks_number:
-            x_ticks = [(seconds[i], time[i]) for i in range(len(seconds))]
-
-        else:
-            x_ticks = [
-                (seconds[i], time[i])
-                for i in _np.linspace(0, len(seconds) - 1, ticks_number, dtype=int)
-            ]
-        return x_ticks
-
     def getLine(self):
         """
         Initialize plotting and get line based on name
         """
+        self.date_axis = MonitorDateAxisItem(
+            orientation="bottom", utcOffset=0
+        )
+        self.graphWidget.setAxisItems({"bottom": self.date_axis})
         self.line_by_name = {}  # {name: line}
         for name, data in self.data_by_name.items():  # loop all names
             pen = self.pen_by_name[name]  # set pen
             self.line_by_name[name] = self.graphWidget.plot(
-                [], [], name=name, pen=pen, label=self.x_ticks
+                [], [], name=name, pen=pen
             )  # initialize data plotting and get line for each name
 
         self.graphWidget.setBackground("w")
         self.graphWidget.showGrid(x=True, y=True)
         self.legend = self.graphWidget.addLegend()
         self.ax = self.graphWidget.getAxis("bottom")
-        self.ax.setStyle(tickFont=pg.QtGui.QFont("Arial", 7))
+        self.ax.setStyle(
+            tickFont=pg.QtGui.QFont("Arial", 7),
+            tickTextOffset=4,
+            tickTextHeight=36,
+            autoExpandTextSpace=False,
+        )
+        # Date/time ticks use two lines, while DateAxisItem normally reserves
+        # space based on its original single-line examples.
+        self.ax.setHeight(52)
     
         return True
 
@@ -433,14 +519,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Set plot type to static if the input is valid, or give the error and set plot type back to live
         """
         self.getSelectedDataRangeByDate()
-        self.selected_data_by_file = False
-        self.selected_data_by_date = True
 
     def setLive(self):
         self.plot_type = True
         self.selected_data_by_file = False
         self.selected_data_by_date = False
         self.static_update_request = False
+        self.startTime.clear()
+        self.durationValue.setValue(0)
+        self.durationUnit.setCurrentIndex(0)
+        self.statusbar.clearMessage()
 
     ### =============================================== Static Plot by File Name ===============================================
     def loadStaticFile(self):
@@ -453,14 +541,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if filename and "log_" in filename and '.csv' in filename:  # if a file is selected and file is valid
             try:
                 self.temp_data_by_name = {"Date": [], "Time": [], "Seconds": []}
-                f = open(filename, "r")
-                names = f.readline().strip("\n").split(",")
-                names = self.convertNames(names)
-                for data in csv.reader(f, delimiter=","):
-                    self.temp_data_by_name = self.updateDataToDict(
-                        names, data, self.temp_data_by_name
-                    )
-                f.close()
+                with open(filename, "r", newline="") as f:
+                    names = f.readline().strip("\n").split(",")
+                    names = self.convertNames(names)
+                    for data in csv.reader(f, delimiter=","):
+                        self.temp_data_by_name = self.updateDataToDict(
+                            names, data, self.temp_data_by_name
+                        )
                 if self.temp_data_by_name["Date"]:
                     self.plot_type = False
                     self.static_update_request = True
@@ -471,7 +558,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 else:
                     self.warningText.appendPlainText("The selected file is empty.")
 
-            except:
+            except Exception:
+                self.debugLogger.exception("Could not load static file %s", filename)
                 self.warningText.appendPlainText(
                     "The selected file is invalid or compromised."
                 )
@@ -487,7 +575,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         self.time_is_valid = True  # initial True and force to False if input time is not valid. This value is used for making a new static plot
 
-        # Get time in seconds in a list [start_time, end_time]
+        # Get the start time and calculate the end from the selected duration.
 
         # Value explains
         # False: the incorrect format that will give the warning message, and the plot will not be static until the input is correct
@@ -498,55 +586,124 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Hours and minutes are optional, the rest are required
         # If the Input and string 'yyyymmddHHMM' or empty, it will assign None to list
 
-        self.static_time_range = [
-            self.returnSeconds(self.startTime.text().strip()),
-            self.returnSeconds(self.endTime.text().strip()),
-        ]
-
-        if (
-            self.static_time_range[0] == False or self.static_time_range[1] == False
-        ):  # input time format is incorrect
+        start = self.returnSeconds(self.startTime.text().strip())
+        duration = self.durationValue.value()
+        if start is False:
             self.warningText.appendPlainText("Static input time is not valid")
             self.time_is_valid = False
+            return False
+        if start is None and duration > 0:
+            self.warningText.appendPlainText(
+                "Start Time is required when Duration is not All."
+            )
+            self.time_is_valid = False
+            return False
 
-        else:
-            # convert seconds to the index of nearest value in self.all_x (all data x-axis)
-            self.static_index = [
-                self.binary_search(self.all_x, self.static_time_range[0]),
-                self.binary_search(self.all_x, self.static_time_range[1]),
-            ]
+        multiplier = 24 * 60 * 60 if self.durationUnit.currentText() == "Days" else 60 * 60
+        end = start + duration * multiplier if start is not None and duration > 0 else None
+        self.static_time_range = [start, end]
 
-            if not self.static_index[
-                0
-            ]:  # force None to 0 for start time if no input is given
-                self.static_index[0] = 0
-            if not self.static_index[
-                1
-            ]:  # force None to the last index in current data x-axis for end time if no input is given
-                self.static_index[1] = len(self.all_x) - 1
-
-            if (
-                self.static_index[1] == 0
-            ):  # the end time error which leads to single points
-                self.warningText.appendPlainText(
-                    "Static input time is not valid: end time is earlier than the logging start time"
-                )
-                self.time_is_valid = False
-
-            if (
-                self.static_index[0] >= self.static_index[1]
-            ):  # the end time error which leads to indexing issue
+        if self.time_is_valid:
+            start, end = self.static_time_range
+            if start is not None and end is not None and start > end:
                 self.warningText.appendPlainText(
                     "Static input time is not valid: end time should be later than start time"
                 )
                 self.time_is_valid = False
+                return False
+            if self._history_loading:
+                return False
 
-            self.plot_type = False  # make plot type to static
-            self.static_update_request = (
-                True  # only update static data when 'OK' button is pressed.
+            self._history_loading = True
+            self.statusbar.showMessage("Loading historical data…")
+            max_points = max(1000, self.graphWidget.width() * 2)
+            self._history_thread = threading.Thread(
+                target=self._load_history,
+                args=(start, end, max_points),
+                daemon=True,
             )
+            self._history_thread.start()
+            return True
 
-        return True
+        return False
+
+    def _history_file_paths(self, start, end):
+        paths = []
+        for filename in self.all_file_list:
+            try:
+                day = datetime.strptime(filename, "log_%Y%m%d.csv")
+            except ValueError:
+                continue
+            day_start = int((day - datetime(1970, 1, 1)).total_seconds())
+            day_end = day_start + 24 * 60 * 60 - 1
+            if start is not None and day_end < start:
+                continue
+            if end is not None and day_start > end:
+                continue
+            paths.append(Path(self.file_dir) / filename)
+        return paths
+
+    def _load_history(self, start, end, max_points):
+        try:
+            all_files = [Path(self.file_dir) / name for name in self.all_file_list]
+            self.history_cache.prune(all_files)
+            files = self._history_file_paths(start, end)
+            self.history_cache.sync(files)
+            rows = self.history_cache.query(start, end, max_points=max_points)
+            self.historyLoaded.emit(self._history_rows_to_data(rows))
+        except Exception as error:
+            self.debugLogger.exception("Historical data loading failed")
+            self.historyFailed.emit(str(error))
+
+    def _history_rows_to_data(self, rows):
+        data = {"Date": [], "Time": [], "Seconds": []}
+        for name in self.command_info_by_name:
+            data[name] = []
+
+        for timestamp, date_text, time_text, payload in rows:
+            data["Date"].append(date_text)
+            data["Time"].append(time_text)
+            data["Seconds"].append(timestamp)
+            aliased = {
+                self.alias_by_name.get(name, name): value
+                for name, value in payload.items()
+                if name not in {"Date", "Time"}
+            }
+            for name in data:
+                if name in {"Date", "Time", "Seconds"}:
+                    continue
+                value = aliased.get(name, "nan")
+                if value == "nan":
+                    data[name].append(_np.nan)
+                elif self.command_info_by_name.get(name, [None] * 4)[3]:
+                    data[name].append(str(value))
+                else:
+                    try:
+                        data[name].append(float(value))
+                    except (TypeError, ValueError):
+                        data[name].append(_np.nan)
+        return data
+
+    def _history_loaded(self, data):
+        self._history_loading = False
+        self.statusbar.clearMessage()
+        if not data["Seconds"]:
+            self.warningText.appendPlainText(
+                "No logged data was found in the selected range."
+            )
+            return
+        self.temp_data_by_name = data
+        self.plot_type = False
+        self.static_update_request = True
+        self.selected_data_by_file = True
+        self.selected_data_by_date = False
+
+    def _history_failed(self, message):
+        self._history_loading = False
+        self.statusbar.clearMessage()
+        self.warningText.appendPlainText(
+            f"Historical data could not be loaded: {message}"
+        )
 
     def returnSeconds(self, time: str):
         """
@@ -568,19 +725,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if len(time) == len("yyyymmdd"):
             try:
                 datetime_object = datetime.strptime(time, "%Y%m%d")
-            except:
+            except ValueError:
                 return False
 
         elif len(time) == len("yyyymmddHH"):
             try:
                 datetime_object = datetime.strptime(time, "%Y%m%d%H")
-            except:
+            except ValueError:
                 return False
 
         elif len(time) == len("yyyymmddHHMM"):
             try:
                 datetime_object = datetime.strptime(time, "%Y%m%d%H%M")
-            except:
+            except ValueError:
                 return False
         else:
             return False
@@ -602,8 +759,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.legend.addItem(self.line_by_name[name], name)
 
                 self.line_by_name[name].setData(self.x, self.data_by_name[name])
-                self.ax.setTicks([self.x_ticks])
-                
             else:  # hide line in hidden widget
                 self.legend.removeItem(name)  # remove legend
                 self.line_by_name[name].setData([], [])  # display empty line
@@ -628,9 +783,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ingnore_list.extend(self.ignore_list)
         ignore_string = ",".join(ingnore_list) + "\n"
         window_length_string = "window length," + self.windowLength.text()
-        f = open(self.file_dir + "display_settings.txt", "w")
-        f.write(hidden_string + shown_string + ignore_string + window_length_string)
-        f.close()
+        with open(
+            os.path.join(self.file_dir, "display_settings.txt"), "w"
+        ) as f:
+            f.write(hidden_string + shown_string + ignore_string + window_length_string)
 
         return True
 
@@ -644,15 +800,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.shown_list = []
         self.ignore_list =[]
         if "display_settings.txt" in os.listdir(self.file_dir):
-            f = open(self.file_dir + "display_settings.txt", "r")
-            hidden_list = f.readline().strip("\n").split(",")[1:]  # remove 'hidden'
-            shown_list = f.readline().strip("\n").split(",")[1:]  # remove 'shown'
-            ignore_list = f.readline().strip("\n").split(",")[1:]  # remove 'ignore'
-            window_length = (
-                f.readline().strip("\n").split(",")[1]
-            )  # get window length in str
-            self.windowLength.setValue(int(window_length))
-            f.close()
+            try:
+                with open(
+                    os.path.join(self.file_dir, "display_settings.txt"), "r"
+                ) as f:
+                    hidden_list = f.readline().strip("\n").split(",")[1:]
+                    shown_list = f.readline().strip("\n").split(",")[1:]
+                    ignore_list = f.readline().strip("\n").split(",")[1:]
+                    window_parts = f.readline().strip("\n").split(",")
+                    self.windowLength.setValue(int(window_parts[1]))
+            except (OSError, ValueError, IndexError):
+                self.debugLogger.exception("Invalid display settings; using defaults")
+                self.hidden_list = self.all_names.copy()
+                self.ignore_list = [
+                    name for name in self.hidden_list
+                    if self.command_info_by_name.get(name, [None] * 4)[3]
+                ]
+                self.hidden_list = [
+                    name for name in self.hidden_list if name not in self.ignore_list
+                ]
+                return False
             for name in self.all_names:
                 if name in shown_list:
                     self.shown_list.append(name)
@@ -745,7 +912,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             ]:  # not consider x-axis labels
                 pass
             else:
-                names[i] = self.getAlias(names[i].strip())  # strip white space in case
+                raw_name = names[i].strip()
+                names[i] = self.alias_by_name.get(raw_name, raw_name)
 
         return names
 
@@ -781,34 +949,57 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         Set indicator values of devices
         """
-        current_exe = (
-            os.popen("wmic process get description")
-            .read()
-            .strip()
-            .replace(" ", "")
-            .split("\n\n")
+        now = _time.monotonic()
+        if now - self._last_process_check >= 2.0:
+            self._logger_running = (
+                self._is_logger_running() or self._has_recent_log_activity()
+            )
+            self._last_process_check = now
+
+        logger_status_change = self._logger_running != (
+            self.indicator_dictionary["Logger"].styleSheet() == self.status[True]
         )
-        logger_status_change = ("SpecLogger_running.exe" in current_exe) != (self.indicator_dictionary["Logger"].styleSheet() == self.status[True])
         if logger_status_change:
-            self.indicator_dictionary["Logger"].setStyleSheet(self.status["SpecLogger_running.exe" in current_exe])
+            self.indicator_dictionary["Logger"].setStyleSheet(
+                self.status[self._logger_running]
+            )
 
         for device in self.device_config:
-            if "SpecLogger_running.exe" in current_exe:
-                change_detected = self.device_config[device]["device_status"] != (self.indicator_dictionary[device].styleSheet() == self.status[True])
+            if self._logger_running:
+                readings = [
+                    self.latest_data.get(self.getAlias(name), _np.nan)
+                    for name in self.commands[device]
+                ] if self.latest_data else []
+                connected = bool(
+                    self.device_config[device]["device_status"]
+                    and readings
+                    and any(not self._is_missing(value) for value in readings)
+                )
+                change_detected = connected != (
+                    self.indicator_dictionary[device].styleSheet()
+                    == self.status[True]
+                )
                 if change_detected:
-                    self.indicator_dictionary[device].setStyleSheet(self.status[self.device_config[device]["device_status"]])
+                    self.indicator_dictionary[device].setStyleSheet(
+                        self.status[connected]
+                    )
             
                 if self.latest_data:
                     for name in self.status_names[device]:
                         indicators = self.commands[device][name]['indicators']
                         indicators_reverse = self.commands[device][name]['indicators_reverse']
-                        status = self.convertStringtoBit(self.latest_data[self.getAlias('status')], len(indicators), True)
+                        status = self.convertStringtoBit(
+                            self.latest_data.get(self.getAlias(name), _np.nan),
+                            len(indicators),
+                            True,
+                        )
                         if status == -1:
                             for i, indicator in enumerate(indicators):
                                self.indicator_dictionary[indicator].setStyleSheet(self.status[False])
                         else:
                             for i, indicator in enumerate(indicators):
-                                res = bool(eval(status[i])) if not indicators_reverse[i] else bool(1 - eval(status[i]))
+                                bit = status[i] == "1"
+                                res = bit if not indicators_reverse[i] else not bit
                                 self.indicator_dictionary[indicator].setStyleSheet(self.status[res])
             else:
                 self.indicator_dictionary[device].setStyleSheet(self.status[False])
@@ -823,28 +1014,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         Set System Status based on indicator values
         """
-        for indicator in self.indicator_dictionary.values():
-            if 'red' in indicator.styleSheet():
-                temp_status = self.systemStatus.styleSheet().replace('green', 'red')
-                self.systemStatus.setStyleSheet(temp_status) 
-                
-                return False
-        
-        for level in self.warning_level_by_name.values():
-            if level == 2:
-                temp_status = self.systemStatus.styleSheet().replace('green', 'red')
-                self.systemStatus.setStyleSheet(temp_status) 
-                return False
-            elif level == 1:
-                if 'green' in indicator.styleSheet():
-                    temp_status = self.systemStatus.styleSheet().replace('green', 'orange')
-                    self.systemStatus.setStyleSheet(temp_status)
-                    return False
+        indicator_error = any(
+            "red" in indicator.styleSheet()
+            for indicator in self.indicator_dictionary.values()
+        )
+        levels = self.warning_level_by_name.values()
+        if indicator_error or 2 in levels:
+            color = "red"
+        elif 1 in levels:
+            color = "orange"
+        else:
+            color = "green"
 
-        temp_status = self.systemStatus.styleSheet().replace('red', 'green')
-        self.systemStatus.setStyleSheet(temp_status)
-
-        return True
+        stylesheet = re.sub(
+            r"background-color\s*:\s*(?:red|green|orange)",
+            f"background-color:{color}",
+            self.systemStatus.styleSheet(),
+        )
+        self.systemStatus.setStyleSheet(stylesheet)
+        return color == "green"
         
     ### ======================================================= Warning Related =======================================================
     def getCommandInfoByName(self):
@@ -878,36 +1066,43 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for name in self.all_data_by_name:
             if name not in ["Date", "Time", "Seconds"]:
                 warning_level = 0
-                minimum = self.command_info_by_name[name][0]
-                maximum = self.command_info_by_name[name][1]
-                static = self.command_info_by_name[name][2]
-                if static:
-                    if self.all_data_by_name[name][-1] != static:
+                command_info = self.command_info_by_name.get(name, [None] * 4)
+                minimum = command_info[0]
+                maximum = command_info[1]
+                static = command_info[2]
+                value = self.all_data_by_name[name][-1]
+                if self._is_missing(value):
+                    warning_level = 2
+                elif static is not None:
+                    if value != static:
                         warning_level = 2
 
-                if minimum:
-                    if self.all_data_by_name[name][-1] < minimum:
+                if minimum is not None and not self._is_missing(value):
+                    if value < minimum:
                         warning_level = 2
 
-                    elif self.all_data_by_name[name][-1] < 1.05 * minimum:
-                        warning_level = 1
+                    elif value < 1.05 * minimum:
+                        warning_level = max(warning_level, 1)
 
-                if maximum:
-                    if self.all_data_by_name[name][-1] > maximum:
+                if maximum is not None and not self._is_missing(value):
+                    if value > maximum:
                         warning_level = 2
-                    elif self.all_data_by_name[name][-1] > 0.95 * maximum:
-                        warning_level = 1
+                    elif value > 0.95 * maximum:
+                        warning_level = max(warning_level, 1)
                 
                 if (
-                    warning_level > 0 and self.warning_level_by_name[name] == 0
-                ):  # warning begins
+                    warning_level > 0
+                    and warning_level != self.warning_level_by_name[name]
+                ):
                     current_time = (
                         self.all_data_by_name["Date"][-1]
                         + " "
                         + self.all_data_by_name["Time"][-1]
                     )
                     self.warning_level_by_name[name] = warning_level
-                    if warning_level == 1:
+                    if self._is_missing(value):
+                        string = current_time + ": " + name + " has no valid data"
+                    elif warning_level == 1:
                         string = current_time + ": " + name + " is reaching limit"
                     elif warning_level == 2:
                         string = current_time + ": " + name + " exceeds limit"
@@ -997,13 +1192,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             Trimming will be applied before Reverse.
             
         '''
-        if isinstance(string, float): # nan
+        if self._is_missing(string):
             return -1
 
-        if '0x' not in string:
-            string = '0x' + string
-
-        out = bin(eval(string))
+        value = str(string).strip()
+        try:
+            number = int(value, 16)
+        except (TypeError, ValueError):
+            return -1
+        out = bin(number)
         out = out.replace('0b', '')
         if bits:
             out = out[-1 * bits:]
@@ -1013,6 +1210,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             out = out[::-1]
         
         return out
+
+    @staticmethod
+    def _is_missing(value):
+        try:
+            return bool(_np.isnan(value))
+        except (TypeError, ValueError):
+            return value is None or value == "nan"
+
+    @staticmethod
+    def _is_logger_running() -> bool:
+        return is_logger_running()
+
+    def _has_recent_log_activity(self) -> bool:
+        """Recognize active loggers that predate or do not use our mutex."""
+        if not self.current_file:
+            return False
+        path = os.path.join(self.file_dir, self.current_file)
+        return has_recent_log_activity(path, self.log_interval)
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        if self.f is not None:
+            self.f.close()
+            self.f = None
+        super().closeEvent(event)
 
 
 

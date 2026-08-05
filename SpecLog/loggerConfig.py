@@ -12,15 +12,19 @@ Author: Yen-Chun Huang
 Company: Bridge 12 Technologies. Inc
 """
 
+import ast
+import logging
 import time
 import os
 from .config.config import (
     CONFIG,
-)  # this will automatically duplicate the config file to default folder
+    _get_log_config,
+)
 from configparser import ConfigParser
 
 device_default = {
     "device_status": False,
+    "protocol": "serial",
     "address": None,
     "id_command": "*IDN?",
     "baud_rate": 9600,
@@ -69,6 +73,7 @@ class loggerConfig:
             config_dir = CONFIG["SETTINGS"]["log_folder_location"] + "/LOG_Config/"
             config_name = "config.cfg"
             config_file = config_dir + config_name
+            _get_log_config(config_name, key="public")
 
         config = ConfigParser()
         config.read(config_file)
@@ -79,7 +84,7 @@ class loggerConfig:
         settings = {}
         for key, value in self.config["SETTINGS"].items():
             if value.isdigit() or value in ["True", "False", "None"]:
-                settings[key] = eval(value)
+                settings[key] = ast.literal_eval(value)
             else:
                 settings[key] = value
         return settings
@@ -100,7 +105,9 @@ class loggerConfig:
                             "data_bits",
                             "index",
                         ]:
-                            temp_dict[key] = eval(self.config[section][key])
+                            temp_dict[key] = ast.literal_eval(
+                                self.config[section][key]
+                            )
                         elif key == "termination":
                             termination = self._getTermination(
                                 self.config[section][key]
@@ -139,14 +146,14 @@ class loggerConfig:
 
         """
         command_info = command_default.copy()
-        command_list = command_string.split(", ")
+        command_list = self._split_command_items(command_string)
         for index, item in enumerate(command_list):
             item = item.strip()  # remove leading and tailing white space
             if index == 0:
                 command_info["command"] = item
 
             else:
-                key, value = item.split("=")  # get key and value from item
+                key, value = item.split("=", 1)  # get key and value from item
                 key = key.strip()  # remove leading and tailing white space
                 value = value.strip()  # remove leading and tailing white space
 
@@ -156,7 +163,7 @@ class loggerConfig:
                 elif key == 'bit_static':
                     command_info['bit_static'] = str(value)
                 else:
-                    command_info[key] = eval(value)
+                    command_info[key] = ast.literal_eval(value)
         
         if command_info['indicators']:
             command_info['indicators_reverse'] = [False] * len(command_info['indicators'])
@@ -166,6 +173,39 @@ class loggerConfig:
                     command_info['indicators'][i] = command_info['indicators'][i].replace('*', '')
 
         return command_info
+
+    @staticmethod
+    def _split_command_items(command_string: str):
+        """Split command options without splitting lists or quoted strings."""
+        items = []
+        start = 0
+        depth = 0
+        quote = None
+        escaped = False
+
+        for index, character in enumerate(command_string):
+            if escaped:
+                escaped = False
+                continue
+            if character == "\\" and quote:
+                escaped = True
+                continue
+            if quote:
+                if character == quote:
+                    quote = None
+                continue
+            if character in {"'", '"'}:
+                quote = character
+            elif character in "[({":
+                depth += 1
+            elif character in "]) }".replace(" ", ""):
+                depth = max(0, depth - 1)
+            elif character == "," and depth == 0:
+                items.append(command_string[start:index].strip())
+                start = index + 1
+
+        items.append(command_string[start:].strip())
+        return items
 
     def _getTermination(self, termination: str):
         """
@@ -179,7 +219,7 @@ class loggerConfig:
         """
 
         if termination.replace("LF", "").replace("CR", ""):
-            self.debugLog.error("Termination is not valid")
+            logging.getLogger(__name__).error("Termination is not valid")
             raise ValueError("Termination is not valid")
         eval_termination = termination.replace("LF", "\n").replace("CR", "\r")
 
