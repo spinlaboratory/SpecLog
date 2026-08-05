@@ -12,6 +12,9 @@ from .SpecLog import *
 
 # System-start task and desktop shortcuts (public)
 STARTUP_TASK_NAME = "SpecLogger"
+TASK_SCHEDULER = os.path.join(
+    os.environ.get("SystemRoot", r"C:\Windows"), "System32", "schtasks.exe"
+)
 desktop_folder = os.path.join(os.environ["USERPROFILE"], "Desktop")
 
 source_running_logger = os.path.join(
@@ -26,7 +29,7 @@ source_monitor = os.path.join(
 def _run_task_scheduler(arguments, runner=None):
     runner = runner or subprocess.run
     return runner(
-        ["schtasks", *arguments],
+        [TASK_SCHEDULER, *arguments],
         capture_output=True,
         text=True,
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -100,7 +103,7 @@ def _build_parser():
         type=str,
         default=None,
         choices=["True", "False"],
-        help="To enable/disable SpecLogger at startup.",
+        help="To enable/disable SpecLogger at startup without login.",
     )
     parser.add_argument(
         "-debug",

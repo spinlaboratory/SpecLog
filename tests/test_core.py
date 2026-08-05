@@ -77,7 +77,7 @@ class SpecLoggerCliTests(unittest.TestCase):
             message = configure_startup(True, "C:/SpecLog/runner.exe", runner)
 
         command = runner.call_args.args[0]
-        self.assertEqual(command[0], "schtasks")
+        self.assertTrue(command[0].lower().endswith("schtasks.exe"))
         self.assertIn("/Create", command)
         self.assertIn("ONSTART", command)
         self.assertIn("SYSTEM", command)
