@@ -10,6 +10,17 @@ import shutil
 import logging
 
 logger = logging.getLogger(__name__)
+PUBLIC_CONFIG_DIR = Path("C:/Users/Public/LOG_Config")
+
+
+def ensure_public_config(configname="config.cfg"):
+    """Return the editable public config path, creating it when necessary."""
+    PUBLIC_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    public_config = PUBLIC_CONFIG_DIR / configname
+    packaged_config = Path(__file__).parent / configname
+    if not public_config.exists():
+        shutil.copy(packaged_config, public_config)
+    return public_config
 
 
 def _escape_split(s, delim=",", escape="\\"):
@@ -69,12 +80,7 @@ def _get_log_config(configname, key=None):
     if key == "public":
         # copy command to public location
         # check if command location
-        log_dir = Path("C:/Users/Public/LOG_Config")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_public_config = log_dir / configname
-
-        if not log_public_config.exists():
-            shutil.copy(log_global_config, log_public_config)
+        log_public_config = ensure_public_config(configname)
 
         config.read(log_public_config)
     else:

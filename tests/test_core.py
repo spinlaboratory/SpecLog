@@ -2,6 +2,7 @@ import logging
 import importlib
 import io
 import inspect
+from configparser import ConfigParser
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -11,6 +12,8 @@ from SpecLog.SpecMonitor import _build_parser
 from SpecLog.debugLog import debugLog
 from SpecLog.device import DEVICE, DeviceProtocol
 from SpecLog.history import HistoryCache
+from SpecLog.config_editor import ConfigEditor
+from SpecLog.SpecLogger import _build_parser as build_logger_parser
 from SpecLog.loggerConfig import loggerConfig
 
 debug_log_module = importlib.import_module("SpecLog.debugLog")
@@ -57,6 +60,33 @@ class SpecMonitorCliTests(unittest.TestCase):
         args = _build_parser().parse_args(["25", "-debug", "False"])
         self.assertEqual(args.debug, "False")
         self.assertEqual(args.number_of_file, 25)
+
+
+class SpecLoggerCliTests(unittest.TestCase):
+    def test_config_flag_opens_editor_mode_without_logger_status(self):
+        args = build_logger_parser().parse_args(["--config"])
+        self.assertTrue(args.config)
+        self.assertIsNone(args.status)
+
+
+class ConfigEditorTests(unittest.TestCase):
+    def test_required_settings_validation(self):
+        config = ConfigParser()
+        config.read_dict(
+            {
+                "SETTINGS": {
+                    "log_interval": "10",
+                    "log_folder_location": "C:/Users/Public/",
+                    "save_file_size_kb": "1024",
+                }
+            }
+        )
+        editor = SimpleNamespace(config=config)
+        ConfigEditor._validate_structure(editor)
+
+        config.remove_option("SETTINGS", "log_interval")
+        with self.assertRaises(ValueError):
+            ConfigEditor._validate_structure(editor)
 
 
 class MonitorLogicTests(unittest.TestCase):

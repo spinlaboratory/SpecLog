@@ -25,7 +25,7 @@ source_monitor = os.path.join(
     os.path.dirname(sys.executable), "scripts", "SpecMonitor_running.exe"
 )
 
-def main_func():
+def _build_parser():
     parser = argparse.ArgumentParser(prog="SpecLogger")
     parser.add_argument(
         "status",
@@ -56,7 +56,21 @@ def main_func():
         choices=["True", "False"],
         help="To start debug console SpecLogger.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Open the public SpecLog configuration editor.",
+    )
+    return parser
+
+
+def main_func(argv=None):
+    args = _build_parser().parse_args(argv)
+
+    if args.config:
+        from .config_editor import main_func as open_config_editor
+
+        return open_config_editor()
 
     if args.startup == "True":
         target = os.path.join(startup_folder, "SpecLogger_running.exe")
