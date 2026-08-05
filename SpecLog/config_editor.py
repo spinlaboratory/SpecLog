@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from .config.config import ensure_public_config
 from .loggerConfig import device_default, loggerConfig
-from .logger_status import is_logger_running
+from .logger_status import has_recent_log_activity, is_logger_running
 from .startup_task import (
     POWERSHELL,
     TASK_SCHEDULER,
@@ -264,7 +264,7 @@ class ConfigEditor(QMainWindow):
         )
         self.task_state_process.finished.connect(self._task_state_finished)
         self.task_state_process.errorOccurred.connect(
-            lambda error: self._set_logger_running_state(None)
+            lambda error: self._set_activity_status_or_unavailable()
         )
         self.logger_timer = QTimer(self)
         self.logger_timer.setInterval(1000)
@@ -373,25 +373,28 @@ class ConfigEditor(QMainWindow):
             )
             return
         running = self._is_logger_running()
+        if not running and self.startup_state == "Unavailable":
+            self._set_activity_status_or_unavailable()
+            return
         self._set_logger_running_state(running)
 
     def _task_state_finished(self, exit_code, exit_status):
         output = self._decode_process_output(self.task_state_process.readAll()).strip()
         if exit_status != QProcess.ExitStatus.NormalExit or exit_code:
             self.scheduled_task_running = False
-            self._set_logger_running_state(None)
+            self._set_activity_status_or_unavailable()
             return
         try:
             state = int(output)
         except ValueError:
             self.scheduled_task_running = False
-            self._set_logger_running_state(None)
+            self._set_activity_status_or_unavailable()
             return
         # MSFT_TaskState: Disabled=1, Queued=2, Ready=3, Running=4.
         self.scheduled_task_running = state in {2, 4}
         self._set_logger_running_state(self.scheduled_task_running)
 
-    def _set_logger_running_state(self, running):
+    def _set_logger_running_state(self, running, controllable=True, label=None):
         if running is None:
             self.logger_status_label.setText("Status unavailable")
             self.logger_status_label.setStyleSheet(
@@ -400,7 +403,9 @@ class ConfigEditor(QMainWindow):
             self.start_logger_button.setEnabled(False)
             self.stop_logger_button.setEnabled(False)
             return
-        self.logger_status_label.setText("Running" if running else "Stopped")
+        self.logger_status_label.setText(
+            label or ("Running" if running else "Stopped")
+        )
         self.logger_status_label.setStyleSheet(
             "color: green; font-weight: bold;"
             if running
@@ -409,8 +414,33 @@ class ConfigEditor(QMainWindow):
         command_active = (
             self.logger_process.state() != QProcess.ProcessState.NotRunning
         )
-        self.start_logger_button.setEnabled(not running and not command_active)
-        self.stop_logger_button.setEnabled(running and not command_active)
+        self.start_logger_button.setEnabled(
+            controllable and not running and not command_active
+        )
+        self.stop_logger_button.setEnabled(
+            controllable and running and not command_active
+        )
+
+    def _set_activity_status_or_unavailable(self):
+        if self._has_recent_log_activity():
+            self._set_logger_running_state(
+                True, controllable=False, label="Running (log activity)"
+            )
+        else:
+            self._set_logger_running_state(None)
+
+    def _has_recent_log_activity(self):
+        try:
+            settings = self.config["SETTINGS"]
+            log_dir = Path(settings["log_folder_location"]) / "LOG"
+            log_interval = settings["log_interval"]
+            latest = max(
+                log_dir.glob("log_*.csv"),
+                key=lambda path: path.stat().st_mtime,
+            )
+        except (KeyError, OSError, ValueError):
+            return False
+        return has_recent_log_activity(latest, log_interval)
 
     def _run_logger_command(self, action):
         if self.logger_process.state() != QProcess.ProcessState.NotRunning:
@@ -502,8 +532,9 @@ class ConfigEditor(QMainWindow):
             != QProcess.ProcessState.NotRunning
         ):
             return
-        if self.startup_state not in {"Enabled", "Disabled", "Not installed"}:
-            self._set_startup_state("Checking...")
+        # Keep the last known state while this background query runs. Changing
+        # Unavailable to Checking here makes the logger-status timer briefly
+        # bypass its log-activity fallback and flash "Stopped".
         self.startup_query_process.start(
             TASK_SCHEDULER,
             query_arguments(xml=True),

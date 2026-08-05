@@ -37,7 +37,7 @@ import pyqtgraph as pg
 from .ui.plotting import Ui_MainWindow
 from .loggerConfig import *
 from .debugLog import *
-from .logger_status import is_logger_running
+from .logger_status import has_recent_log_activity, is_logger_running
 from .history import HistoryCache
 
 red = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:red;\nborder:2px solid white;\n}\n"
@@ -1227,13 +1227,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self.current_file:
             return False
         path = os.path.join(self.file_dir, self.current_file)
-        try:
-            age = _time.time() - os.path.getmtime(path)
-        except OSError:
-            return False
-        # Permit one delayed write without leaving a stopped logger green for
-        # an excessive period.
-        return age <= max(5.0, self.log_interval * 2.5)
+        return has_recent_log_activity(path, self.log_interval)
 
     def closeEvent(self, event):
         self.timer.stop()
