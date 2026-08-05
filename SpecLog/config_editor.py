@@ -283,9 +283,7 @@ class ConfigEditor(QMainWindow):
             QProcess.ProcessChannelMode.MergedChannels
         )
         self.startup_query_process.finished.connect(self._startup_query_finished)
-        self.startup_query_process.errorOccurred.connect(
-            lambda error: self._set_startup_state("Unavailable")
-        )
+        self.startup_query_process.errorOccurred.connect(self._startup_query_error)
         self.startup_timer = QTimer(self)
         self.startup_timer.setInterval(5000)
         self.startup_timer.timeout.connect(self._refresh_startup_status)
@@ -508,26 +506,74 @@ class ConfigEditor(QMainWindow):
         )
 
     def _startup_query_finished(self, exit_code, exit_status):
-        output = self._decode_process_output(self.startup_query_process.readAll())
+        raw_output = bytes(self.startup_query_process.readAll())
+        output = self._decode_process_output(raw_output)
         if exit_status != QProcess.ExitStatus.NormalExit:
             self._set_startup_state("Unavailable")
+            self._set_logger_message(
+                output or "Could not query the SpecLogger startup task.",
+                popup=True,
+            )
             return
         if exit_code:
-            self._set_startup_state("Not installed")
+            lowered = output.lower()
+            missing = any(
+                phrase in lowered
+                for phrase in (
+                    "cannot find",
+                    "does not exist",
+                    "path specified",
+                )
+            )
+            self._set_startup_state("Not installed" if missing else "Unavailable")
+            if not missing:
+                self._set_logger_message(
+                    output
+                    or "The startup task exists but this account cannot query it. "
+                    "Run the configuration editor as administrator.",
+                    popup=True,
+                )
             return
         try:
-            root = ElementTree.fromstring(output.lstrip("\ufeff\r\n "))
-            enabled_text = next(
-                element.text
-                for element in root.iter()
-                if element.tag.rsplit("}", 1)[-1] == "Enabled"
-            )
-        except (ElementTree.ParseError, StopIteration):
+            enabled = self._parse_task_enabled(raw_output)
+        except (ElementTree.ParseError, StopIteration, ValueError):
             self._set_startup_state("Unknown")
+            self._set_logger_message(
+                "Task Scheduler returned an unreadable startup-task definition.",
+                popup=True,
+            )
             return
-        self._set_startup_state(
-            "Enabled" if enabled_text.strip().lower() == "true" else "Disabled"
+        self._set_startup_state("Enabled" if enabled else "Disabled")
+
+    def _startup_query_error(self, error):
+        self._set_startup_state("Unavailable")
+        self._set_logger_message(
+            f"Could not query the startup task: "
+            f"{self.startup_query_process.errorString()}",
+            popup=True,
         )
+
+    @staticmethod
+    def _parse_task_enabled(raw_output):
+        """Read the Enabled setting from UTF-8 or UTF-16 task XML."""
+        raw = bytes(raw_output)
+        try:
+            root = ElementTree.fromstring(raw)
+        except ElementTree.ParseError:
+            text = ConfigEditor._decode_process_output(raw)
+            declaration_end = text.find("?>")
+            if declaration_end >= 0:
+                text = text[declaration_end + 2 :]
+            root = ElementTree.fromstring(text.lstrip("\ufeff\r\n "))
+        enabled_text = next(
+            element.text
+            for element in root.iter()
+            if element.tag.rsplit("}", 1)[-1] == "Enabled"
+        )
+        normalized = (enabled_text or "").strip().lower()
+        if normalized not in {"true", "false"}:
+            raise ValueError(f"Unexpected Enabled value: {enabled_text!r}")
+        return normalized == "true"
 
     def _set_startup_state(self, state):
         previous_state = self.startup_state
