@@ -16,6 +16,7 @@ from SpecLog.config_editor import ConfigEditor
 from SpecLog.SpecLogger import (
     _build_parser as build_logger_parser,
     configure_startup,
+    control_scheduled_logger,
 )
 from SpecLog.loggerConfig import loggerConfig
 
@@ -77,7 +78,7 @@ class SpecLoggerCliTests(unittest.TestCase):
             message = configure_startup(True, "C:/SpecLog/runner.exe", runner)
 
         command = runner.call_args.args[0]
-        self.assertEqual(command[0], "schtasks")
+        self.assertTrue(command[0].lower().endswith("schtasks.exe"))
         self.assertIn("/Create", command)
         self.assertIn("ONSTART", command)
         self.assertIn("SYSTEM", command)
@@ -93,6 +94,32 @@ class SpecLoggerCliTests(unittest.TestCase):
         self.assertIn("/Query", runner.call_args_list[0].args[0])
         self.assertIn("/DISABLE", runner.call_args_list[1].args[0])
         self.assertIn("disabled", message)
+
+    def test_start_uses_scheduled_task_when_installed(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        runner = Mock(side_effect=[result, result])
+
+        message = control_scheduled_logger("start", runner)
+
+        self.assertIn("/Query", runner.call_args_list[0].args[0])
+        self.assertIn("/Run", runner.call_args_list[1].args[0])
+        self.assertIn("start requested", message)
+
+    def test_stop_uses_scheduled_task_when_installed(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        runner = Mock(side_effect=[result, result])
+
+        message = control_scheduled_logger("stop", runner)
+
+        self.assertIn("/End", runner.call_args_list[1].args[0])
+        self.assertIn("stopped", message)
+
+    def test_process_control_falls_back_when_task_is_missing(self):
+        missing = SimpleNamespace(returncode=1, stdout="", stderr="")
+        runner = Mock(return_value=missing)
+
+        self.assertIsNone(control_scheduled_logger("start", runner))
+        self.assertEqual(runner.call_count, 1)
 
 
 class ConfigEditorTests(unittest.TestCase):
@@ -113,6 +140,21 @@ class ConfigEditorTests(unittest.TestCase):
         config.remove_option("SETTINGS", "log_interval")
         with self.assertRaises(ValueError):
             ConfigEditor._validate_structure(editor)
+
+    def test_task_without_enabled_element_defaults_to_enabled(self):
+        task_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+          <Settings><StartWhenAvailable>true</StartWhenAvailable></Settings>
+        </Task>"""
+
+        self.assertTrue(ConfigEditor._parse_task_enabled(task_xml))
+
+    def test_task_enabled_element_is_namespace_agnostic(self):
+        task_xml = b"""<Task xmlns="urn:test">
+          <Settings><Enabled>false</Enabled></Settings>
+        </Task>"""
+
+        self.assertFalse(ConfigEditor._parse_task_enabled(task_xml))
 
 
 class MonitorLogicTests(unittest.TestCase):

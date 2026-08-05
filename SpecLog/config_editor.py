@@ -2,12 +2,13 @@
 
 import ast
 from configparser import ConfigParser
-import ctypes
+import locale
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
+from xml.etree import ElementTree
 
 from PySide6.QtCore import QProcess, QTimer
 from PySide6.QtWidgets import (
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QTabWidget,
@@ -33,6 +35,14 @@ from PySide6.QtWidgets import (
 
 from .config.config import ensure_public_config
 from .loggerConfig import device_default, loggerConfig
+from .logger_status import is_logger_running
+from .startup_task import (
+    POWERSHELL,
+    TASK_SCHEDULER,
+    control_arguments,
+    query_arguments,
+    state_arguments,
+)
 
 
 class IndicatorEditor(QDialog):
@@ -121,7 +131,10 @@ class ConfigEditor(QMainWindow):
         self.config = ConfigParser(interpolation=None)
         self.current_section = None
         self.logger_action = None
+        self.logger_action_uses_task = False
         self.logger_log_offset = 0
+        self.startup_state = "Checking..."
+        self.scheduled_task_running = False
         self.setWindowTitle("SpecLog Configuration")
         self.resize(900, 600)
         self._build_ui()
@@ -214,9 +227,12 @@ class ConfigEditor(QMainWindow):
         logger_title = QLabel("SpecLogger:")
         logger_title.setStyleSheet("font-weight: bold;")
         self.logger_status_label = QLabel("Checking status...")
-        self.logger_message_label = QLabel()
-        self.logger_message_label.setWordWrap(False)
-        self.logger_message_label.setMaximumWidth(240)
+        self.logger_message_area = QPlainTextEdit()
+        self.logger_message_area.setReadOnly(True)
+        self.logger_message_area.setMaximumHeight(58)
+        self.logger_message_area.setPlaceholderText("SpecLogger messages")
+        self.full_logger_message = ""
+        self.logger_message_is_error = False
         self.start_logger_button = QPushButton("Start")
         self.start_logger_button.clicked.connect(
             lambda: self._run_logger_command("start")
@@ -225,24 +241,72 @@ class ConfigEditor(QMainWindow):
         self.stop_logger_button.clicked.connect(
             lambda: self._run_logger_command("stop")
         )
+        startup_title = QLabel("Startup:")
+        startup_title.setStyleSheet("font-weight: bold;")
+        self.startup_status_label = QLabel("Checking...")
+        self.enable_startup_button = QPushButton("Enable")
+        self.enable_startup_button.clicked.connect(
+            lambda: self._run_startup_command(True)
+        )
+        self.disable_startup_button = QPushButton("Disable")
+        self.disable_startup_button.clicked.connect(
+            lambda: self._run_startup_command(False)
+        )
         self.logger_process = QProcess(self)
         self.logger_process.setProcessChannelMode(
             QProcess.ProcessChannelMode.MergedChannels
         )
         self.logger_process.finished.connect(self._logger_command_finished)
         self.logger_process.errorOccurred.connect(self._logger_command_error)
+        self.task_state_process = QProcess(self)
+        self.task_state_process.setProcessChannelMode(
+            QProcess.ProcessChannelMode.MergedChannels
+        )
+        self.task_state_process.finished.connect(self._task_state_finished)
+        self.task_state_process.errorOccurred.connect(
+            lambda error: self._set_logger_running_state(None)
+        )
         self.logger_timer = QTimer(self)
         self.logger_timer.setInterval(1000)
         self.logger_timer.timeout.connect(self._refresh_logger_status)
         self.logger_timer.start()
         self._refresh_logger_status()
 
+        self.startup_process = QProcess(self)
+        self.startup_process.setProcessChannelMode(
+            QProcess.ProcessChannelMode.MergedChannels
+        )
+        self.startup_process.finished.connect(self._startup_command_finished)
+        self.startup_process.errorOccurred.connect(self._startup_command_error)
+        self.startup_query_process = QProcess(self)
+        self.startup_query_process.setProcessChannelMode(
+            QProcess.ProcessChannelMode.MergedChannels
+        )
+        self.startup_query_process.finished.connect(self._startup_query_finished)
+        self.startup_query_process.errorOccurred.connect(self._startup_query_error)
+        self.startup_timer = QTimer(self)
+        self.startup_timer.setInterval(5000)
+        self.startup_timer.timeout.connect(self._refresh_startup_status)
+        self.startup_timer.start()
+        self._refresh_startup_status()
+
+        message_row = QHBoxLayout()
+        message_label = QLabel("Messages:")
+        message_label.setStyleSheet("font-weight: bold;")
+        message_row.addWidget(message_label)
+        message_row.addWidget(self.logger_message_area, 1)
+        layout.addLayout(message_row)
+
         actions = QHBoxLayout()
         actions.addWidget(logger_title)
         actions.addWidget(self.logger_status_label)
         actions.addWidget(self.start_logger_button)
         actions.addWidget(self.stop_logger_button)
-        actions.addWidget(self.logger_message_label)
+        actions.addSpacing(8)
+        actions.addWidget(startup_title)
+        actions.addWidget(self.startup_status_label)
+        actions.addWidget(self.enable_startup_button)
+        actions.addWidget(self.disable_startup_button)
         actions.addSpacing(12)
         self.status_label = QLabel()
         actions.addWidget(self.status_label)
@@ -272,18 +336,20 @@ class ConfigEditor(QMainWindow):
         self.add_value_command_button.setVisible(tab_index == 0)
         self.add_status_command_button.setVisible(tab_index == 1)
 
+    def _set_logger_message(self, message, popup=False):
+        message = str(message).strip()
+        self.full_logger_message = message
+        self.logger_message_is_error = popup
+        self.logger_message_area.setPlainText(message)
+        self.logger_message_area.setStyleSheet(
+            "QPlainTextEdit { color: #b00020; }" if popup else ""
+        )
+        scrollbar = self.logger_message_area.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
     @staticmethod
     def _is_logger_running():
-        if os.name != "nt":
-            return False
-        synchronize = 0x00100000
-        handle = ctypes.windll.kernel32.OpenMutexW(
-            synchronize, False, "Local\\SpecLog.SpecLogger"
-        )
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
+        return is_logger_running()
 
     def _refresh_logger_status(self):
         if os.name != "nt":
@@ -291,7 +357,49 @@ class ConfigEditor(QMainWindow):
             self.start_logger_button.setEnabled(False)
             self.stop_logger_button.setEnabled(False)
             return
+        # "Unknown" means that the task was found but its XML did not expose a
+        # startup setting we understand.  Its runtime state is still available
+        # from Task Scheduler and is more authoritative than the process-local
+        # mutex check (the task normally runs as SYSTEM).
+        if self.startup_state in {"Enabled", "Disabled", "Unknown"}:
+            if (
+                self.task_state_process.state()
+                != QProcess.ProcessState.NotRunning
+            ):
+                return
+            self.task_state_process.start(
+                POWERSHELL,
+                state_arguments(),
+            )
+            return
         running = self._is_logger_running()
+        self._set_logger_running_state(running)
+
+    def _task_state_finished(self, exit_code, exit_status):
+        output = self._decode_process_output(self.task_state_process.readAll()).strip()
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code:
+            self.scheduled_task_running = False
+            self._set_logger_running_state(None)
+            return
+        try:
+            state = int(output)
+        except ValueError:
+            self.scheduled_task_running = False
+            self._set_logger_running_state(None)
+            return
+        # MSFT_TaskState: Disabled=1, Queued=2, Ready=3, Running=4.
+        self.scheduled_task_running = state in {2, 4}
+        self._set_logger_running_state(self.scheduled_task_running)
+
+    def _set_logger_running_state(self, running):
+        if running is None:
+            self.logger_status_label.setText("Status unavailable")
+            self.logger_status_label.setStyleSheet(
+                "color: gray; font-weight: bold;"
+            )
+            self.start_logger_button.setEnabled(False)
+            self.stop_logger_button.setEnabled(False)
+            return
         self.logger_status_label.setText("Running" if running else "Stopped")
         self.logger_status_label.setStyleSheet(
             "color: green; font-weight: bold;"
@@ -308,38 +416,58 @@ class ConfigEditor(QMainWindow):
         if self.logger_process.state() != QProcess.ProcessState.NotRunning:
             return
         self.logger_action = action
+        self.logger_action_uses_task = (
+            self.startup_state == "Enabled" or self.scheduled_task_running
+        )
         debug_log = self._debug_log_path()
         try:
             self.logger_log_offset = debug_log.stat().st_size
         except OSError:
             self.logger_log_offset = 0
-        self.logger_message_label.setText(
+        self._set_logger_message(
             "Starting SpecLogger..." if action == "start" else "Stopping SpecLogger..."
         )
         self.start_logger_button.setEnabled(False)
         self.stop_logger_button.setEnabled(False)
-        self.logger_process.start(
-            sys.executable, ["-m", "SpecLog.SpecLogger", action]
-        )
+        if self.logger_action_uses_task:
+            self.logger_process.start(
+                TASK_SCHEDULER, control_arguments(action)
+            )
+        else:
+            self.logger_process.start(
+                sys.executable, ["-m", "SpecLog.SpecLogger", action]
+            )
 
     def _logger_command_finished(self, exit_code, exit_status):
         output = bytes(self.logger_process.readAll()).decode(errors="replace").strip()
         action = self.logger_action
+        used_task = self.logger_action_uses_task
         self.logger_action = None
+        self.logger_action_uses_task = False
         if exit_status != QProcess.ExitStatus.NormalExit or exit_code:
-            self.logger_message_label.setText(
-                output or f"SpecLogger command failed with exit code {exit_code}."
+            self._set_logger_message(
+                output or f"SpecLogger command failed with exit code {exit_code}.",
+                popup=True,
             )
             self._refresh_logger_status()
             return
         if output:
-            self.logger_message_label.setText(output.splitlines()[-1])
+            self._set_logger_message(output)
+        if used_task:
+            self._set_logger_message(
+                "SpecLogger scheduled task start requested."
+                if action == "start"
+                else "SpecLogger scheduled task stopped."
+            )
+            QTimer.singleShot(800, self._refresh_logger_status)
+            return
         QTimer.singleShot(1200, lambda: self._verify_logger_action(action))
 
     def _logger_command_error(self, error):
-        self.logger_message_label.setText(
+        self._set_logger_message(
             f"Could not run the SpecLogger command: "
-            f"{self.logger_process.errorString()}"
+            f"{self.logger_process.errorString()}",
+            popup=True,
         )
         self.logger_action = None
         self._refresh_logger_status()
@@ -349,19 +477,181 @@ class ConfigEditor(QMainWindow):
         running = self._is_logger_running()
         succeeded = running if action == "start" else not running
         if succeeded:
-            self.logger_message_label.setText(
+            self._set_logger_message(
                 "SpecLogger started." if running else "SpecLogger stopped."
             )
         else:
             error = self._latest_logger_error()
-            self.logger_message_label.setText(
+            self._set_logger_message(
                 error
                 or (
                     "SpecLogger stopped before startup completed."
                     if action == "start"
                     else "SpecLogger did not stop."
+                ),
+                popup=True,
+            )
+
+    def _refresh_startup_status(self):
+        if os.name != "nt":
+            self._set_startup_state("Unavailable")
+            return
+        if (
+            self.startup_process.state() != QProcess.ProcessState.NotRunning
+            or self.startup_query_process.state()
+            != QProcess.ProcessState.NotRunning
+        ):
+            return
+        if self.startup_state not in {"Enabled", "Disabled", "Not installed"}:
+            self._set_startup_state("Checking...")
+        self.startup_query_process.start(
+            TASK_SCHEDULER,
+            query_arguments(xml=True),
+        )
+
+    def _startup_query_finished(self, exit_code, exit_status):
+        raw_output = bytes(self.startup_query_process.readAll())
+        output = self._decode_process_output(raw_output)
+        if exit_status != QProcess.ExitStatus.NormalExit:
+            self._set_startup_state("Unavailable")
+            self._set_logger_message(
+                output or "Could not query the SpecLogger startup task.",
+                popup=True,
+            )
+            return
+        if exit_code:
+            lowered = output.lower()
+            missing = any(
+                phrase in lowered
+                for phrase in (
+                    "cannot find",
+                    "does not exist",
+                    "path specified",
                 )
             )
+            self._set_startup_state("Not installed" if missing else "Unavailable")
+            if not missing:
+                self._set_logger_message(
+                    output
+                    or "The startup task exists but this account cannot query it. "
+                    "Run the configuration editor as administrator.",
+                    popup=True,
+                )
+            return
+        try:
+            enabled = self._parse_task_enabled(raw_output)
+        except (ElementTree.ParseError, StopIteration, ValueError):
+            self._set_startup_state("Unknown")
+            self._set_logger_message(
+                "Task Scheduler returned an unreadable startup-task definition.",
+                popup=True,
+            )
+            return
+        self._set_startup_state("Enabled" if enabled else "Disabled")
+
+    def _startup_query_error(self, error):
+        self._set_startup_state("Unavailable")
+        self._set_logger_message(
+            f"Could not query the startup task: "
+            f"{self.startup_query_process.errorString()}",
+            popup=True,
+        )
+
+    @staticmethod
+    def _parse_task_enabled(raw_output):
+        """Read the Enabled setting from UTF-8 or UTF-16 task XML."""
+        raw = bytes(raw_output)
+        try:
+            root = ElementTree.fromstring(raw)
+        except ElementTree.ParseError:
+            text = ConfigEditor._decode_process_output(raw)
+            declaration_end = text.find("?>")
+            if declaration_end >= 0:
+                text = text[declaration_end + 2 :]
+            root = ElementTree.fromstring(text.lstrip("\ufeff\r\n "))
+        enabled_element = next(
+            (
+                element
+                for element in root.iter()
+                if element.tag.rsplit("}", 1)[-1] == "Enabled"
+            ),
+            None,
+        )
+        # Enabled is optional in the Task Scheduler schema and defaults to
+        # true when omitted.
+        if enabled_element is None:
+            return True
+        enabled_text = enabled_element.text
+        normalized = (enabled_text or "").strip().lower()
+        if normalized not in {"true", "false"}:
+            raise ValueError(f"Unexpected Enabled value: {enabled_text!r}")
+        return normalized == "true"
+
+    def _set_startup_state(self, state):
+        previous_state = self.startup_state
+        self.startup_state = state
+        self.startup_status_label.setText(state)
+        color = {
+            "Enabled": "green",
+            "Disabled": "red",
+            "Not installed": "red",
+        }.get(state, "gray")
+        self.startup_status_label.setStyleSheet(
+            f"color: {color}; font-weight: bold;"
+        )
+        command_active = (
+            self.startup_process.state() != QProcess.ProcessState.NotRunning
+        )
+        self.enable_startup_button.setEnabled(
+            not command_active and state in {"Disabled", "Not installed"}
+        )
+        self.disable_startup_button.setEnabled(
+            not command_active and state == "Enabled"
+        )
+        if state != previous_state and state != "Checking...":
+            self._refresh_logger_status()
+
+    def _run_startup_command(self, enabled):
+        if self.startup_process.state() != QProcess.ProcessState.NotRunning:
+            return
+        self._set_logger_message(
+            "Enabling startup..." if enabled else "Disabling startup..."
+        )
+        self.enable_startup_button.setEnabled(False)
+        self.disable_startup_button.setEnabled(False)
+        self.startup_process.start(
+            sys.executable,
+            ["-m", "SpecLog.SpecLogger", "-startup", str(enabled)],
+        )
+
+    def _startup_command_finished(self, exit_code, exit_status):
+        output = self._decode_process_output(self.startup_process.readAll()).strip()
+        if exit_status != QProcess.ExitStatus.NormalExit or exit_code:
+            self._set_logger_message(
+                output
+                or "Could not change startup. Run the configuration editor as "
+                "administrator.",
+                popup=True,
+            )
+        else:
+            self._set_logger_message(
+                output.splitlines()[-1] if output else "Startup setting updated."
+            )
+        QTimer.singleShot(500, self._refresh_startup_status)
+
+    def _startup_command_error(self, error):
+        self._set_logger_message(
+            f"Could not change startup: {self.startup_process.errorString()}",
+            popup=True,
+        )
+        self._refresh_startup_status()
+
+    @staticmethod
+    def _decode_process_output(output):
+        raw = bytes(output)
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")) or b"\x00" in raw[:100]:
+            return raw.decode("utf-16", errors="replace")
+        return raw.decode(locale.getpreferredencoding(False), errors="replace")
 
     def _latest_logger_error(self):
         debug_log = self._debug_log_path()

@@ -34,6 +34,8 @@ SpecLogger -startup False
 
 This manages a Windows Task Scheduler task running as `SYSTEM`. Enabling it
 starts the logger 30 seconds after boot so USB and serial drivers can initialize.
+When this task is installed, `SpecLogger start` and `SpecLogger stop` control the
+scheduled task so the no-login logger can also be restarted after login.
 
 SpecMonitor opens quickly by loading only recent live files. To plot all
 available history, leave both date fields at their defaults and click **Ok**.

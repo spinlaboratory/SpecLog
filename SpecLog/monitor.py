@@ -18,7 +18,6 @@ Company: Bridge 12 Technologies, Inc
 
 import os
 import csv
-import ctypes
 from pathlib import Path
 import re
 import threading
@@ -38,6 +37,7 @@ import pyqtgraph as pg
 from .ui.plotting import Ui_MainWindow
 from .loggerConfig import *
 from .debugLog import *
+from .logger_status import is_logger_running
 from .history import HistoryCache
 
 red = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:red;\nborder:2px solid white;\n}\n"
@@ -1220,16 +1220,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     @staticmethod
     def _is_logger_running() -> bool:
-        if os.name != "nt":
-            return False
-        synchronize = 0x00100000
-        handle = ctypes.windll.kernel32.OpenMutexW(
-            synchronize, False, "Local\\SpecLog.SpecLogger"
-        )
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
+        return is_logger_running()
 
     def _has_recent_log_activity(self) -> bool:
         """Recognize active loggers that predate or do not use our mutex."""
