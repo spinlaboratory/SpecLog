@@ -19,13 +19,13 @@
      <widget class="QGroupBox" name="groupBox_6">
       <property name="minimumSize">
        <size>
-        <width>301</width>
+         <width>360</width>
         <height>0</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>301</width>
+         <width>360</width>
         <height>16777215</height>
        </size>
       </property>
@@ -43,20 +43,20 @@
     <item row="3" column="0">
      <widget class="QGroupBox" name="groupBox">
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
        <size>
-        <width>301</width>
+         <width>360</width>
         <height>131</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>301</width>
+         <width>360</width>
         <height>131</height>
        </size>
       </property>
@@ -68,13 +68,13 @@
         <widget class="QLabel" name="label_3">
          <property name="minimumSize">
           <size>
-           <width>49</width>
+            <width>125</width>
            <height>20</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>49</width>
+            <width>125</width>
            <height>20</height>
           </size>
          </property>
@@ -97,49 +97,67 @@
            <height>20</height>
           </size>
          </property>
-         <property name="text">
-          <string>yyyymmddHHMM</string>
-         </property>
+          <property name="placeholderText">
+           <string>yyyymmddHHMM</string>
+          </property>
         </widget>
        </item>
        <item row="1" column="0">
         <widget class="QLabel" name="label_4">
          <property name="minimumSize">
           <size>
-           <width>43</width>
+            <width>125</width>
            <height>20</height>
           </size>
          </property>
          <property name="maximumSize">
           <size>
-           <width>43</width>
+            <width>125</width>
            <height>20</height>
           </size>
          </property>
-         <property name="text">
-          <string>End Time</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QLineEdit" name="endTime">
-         <property name="minimumSize">
-          <size>
-           <width>200</width>
-           <height>20</height>
-          </size>
-         </property>
-         <property name="maximumSize">
-          <size>
-           <width>200</width>
-           <height>20</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>yyyymmddHHMM</string>
-         </property>
-        </widget>
-       </item>
+          <property name="text">
+           <string>Duration</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QWidget" name="durationContainer" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>200</width>
+            <height>23</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>200</width>
+            <height>23</height>
+           </size>
+          </property>
+          <layout class="QHBoxLayout" name="durationLayout">
+           <property name="spacing"><number>4</number></property>
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <item>
+            <widget class="QDoubleSpinBox" name="durationValue">
+             <property name="decimals"><number>2</number></property>
+             <property name="maximum"><double>100000.000000000000000</double></property>
+             <property name="singleStep"><double>1.000000000000000</double></property>
+             <property name="specialValueText"><string>All</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="durationUnit">
+             <item><property name="text"><string>Hours</string></property></item>
+             <item><property name="text"><string>Days</string></property></item>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
        <item row="2" column="0">
         <widget class="QPushButton" name="setToLive">
          <property name="minimumSize">
@@ -185,13 +203,13 @@
      <widget class="QGroupBox" name="groupBox_2">
       <property name="minimumSize">
        <size>
-        <width>291</width>
+        <width>360</width>
         <height>301</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>291</width>
+        <width>360</width>
         <height>301</height>
        </size>
       </property>
@@ -322,20 +340,20 @@
     <item row="0" column="1">
      <widget class="QGroupBox" name="groupBox_4">
       <property name="sizePolicy">
-       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
         <horstretch>0</horstretch>
         <verstretch>0</verstretch>
        </sizepolicy>
       </property>
       <property name="minimumSize">
        <size>
-        <width>452</width>
+         <width>452</width>
         <height>121</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>452</width>
+         <width>16777215</width>
         <height>121</height>
        </size>
       </property>
@@ -391,13 +409,13 @@
      <widget class="QGroupBox" name="groupBox_5">
       <property name="minimumSize">
        <size>
-        <width>155</width>
+        <width>360</width>
         <height>53</height>
        </size>
       </property>
       <property name="maximumSize">
        <size>
-        <width>301</width>
+        <width>360</width>
         <height>53</height>
        </size>
       </property>
@@ -482,18 +500,24 @@
     </item>
     <item row="0" column="2">
      <widget class="QGroupBox" name="groupBox_3">
-      <property name="title">
-       <string/>
-      </property>
-      <widget class="QCheckBox" name="systemStatus">
-       <property name="geometry">
-        <rect>
-         <x>40</x>
-         <y>30</y>
-         <width>241</width>
-         <height>61</height>
-        </rect>
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
        </property>
+       <property name="minimumSize">
+        <size><width>452</width><height>121</height></size>
+       </property>
+       <property name="maximumSize">
+        <size><width>16777215</width><height>121</height></size>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <layout class="QHBoxLayout" name="systemStatusLayout">
+        <item alignment="Qt::AlignCenter">
+         <widget class="QCheckBox" name="systemStatus">
        <property name="font">
         <font>
          <pointsize>20</pointsize>
@@ -515,8 +539,10 @@ QCheckBox::indicator:unchecked {
        <property name="checkable">
         <bool>false</bool>
        </property>
+         </widget>
+        </item>
+       </layout>
       </widget>
-     </widget>
     </item>
    </layout>
   </widget>

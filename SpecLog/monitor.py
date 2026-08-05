@@ -23,9 +23,16 @@ from pathlib import Path
 import re
 import threading
 import time as _time
-from datetime import datetime
+from datetime import datetime, timezone
 import numpy as _np
-from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QVBoxLayout, QCheckBox
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QVBoxLayout,
+    QCheckBox,
+    QSizePolicy,
+)
 from PySide6 import QtCore
 import pyqtgraph as pg 
 from .ui.plotting import Ui_MainWindow
@@ -40,11 +47,21 @@ green = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n
 class MonitorDateAxisItem(pg.DateAxisItem):
     """Adaptive date axis whose time labels always retain the date."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # DateAxisItem estimates density from short, time-only examples. Our
+        # two-line labels are wider, so use their real worst-case footprint.
+        for zoom_level in self.zoomLevels.values():
+            zoom_level.exampleText = "2026-08-05\n23:59"
+        # Permit centered labels near the left and right edges to extend into
+        # the plot margins instead of suppressing both labels on narrow views.
+        self.setStyle(hideOverlappingLabels=70)
+
     def tickStrings(self, values, scale, spacing):
         labels = []
         for value in values:
             try:
-                date_time = datetime.utcfromtimestamp(value)
+                date_time = datetime.fromtimestamp(value, timezone.utc)
                 if spacing < 1:
                     label = date_time.strftime("%Y-%m-%d\n%H:%M:%S.%f")[:-3]
                 elif spacing < 60:
@@ -58,6 +75,15 @@ class MonitorDateAxisItem(pg.DateAxisItem):
             labels.append(label)
         return labels
 
+    def tickValues(self, minVal, maxVal, size):
+        levels = super().tickValues(minVal, maxVal, size)
+        if any(values for _spacing, values in levels) or maxVal <= minVal:
+            return levels
+        # PyQtGraph may return no ticks when a narrow axis cannot fit its
+        # preferred calendar interval. Always retain one centered reference.
+        spacing = maxVal - minVal
+        return [(spacing, [(minVal + maxVal) / 2])]
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     historyLoaded = QtCore.Signal(object)
@@ -66,6 +92,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, config_file: str = None, number_of_files: int = 10):
         super().__init__()
         self.setupUi(self)
+        self.groupBox_4.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.groupBox_3.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.gridLayout_2.setColumnStretch(1, 1)
+        self.gridLayout_2.setColumnStretch(2, 1)
 
         # configuration file
         config = loggerConfig(config_file)
@@ -491,6 +525,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.selected_data_by_file = False
         self.selected_data_by_date = False
         self.static_update_request = False
+        self.startTime.clear()
+        self.durationValue.setValue(0)
+        self.durationUnit.setCurrentIndex(0)
+        self.statusbar.clearMessage()
 
     ### =============================================== Static Plot by File Name ===============================================
     def loadStaticFile(self):
@@ -537,7 +575,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         self.time_is_valid = True  # initial True and force to False if input time is not valid. This value is used for making a new static plot
 
-        # Get time in seconds in a list [start_time, end_time]
+        # Get the start time and calculate the end from the selected duration.
 
         # Value explains
         # False: the incorrect format that will give the warning message, and the plot will not be static until the input is correct
@@ -548,18 +586,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Hours and minutes are optional, the rest are required
         # If the Input and string 'yyyymmddHHMM' or empty, it will assign None to list
 
-        self.static_time_range = [
-            self.returnSeconds(self.startTime.text().strip()),
-            self.returnSeconds(self.endTime.text().strip()),
-        ]
-
-        if (
-            self.static_time_range[0] == False or self.static_time_range[1] == False
-        ):  # input time format is incorrect
+        start = self.returnSeconds(self.startTime.text().strip())
+        duration = self.durationValue.value()
+        if start is False:
             self.warningText.appendPlainText("Static input time is not valid")
             self.time_is_valid = False
+            return False
+        if start is None and duration > 0:
+            self.warningText.appendPlainText(
+                "Start Time is required when Duration is not All."
+            )
+            self.time_is_valid = False
+            return False
 
-        else:
+        multiplier = 24 * 60 * 60 if self.durationUnit.currentText() == "Days" else 60 * 60
+        end = start + duration * multiplier if start is not None and duration > 0 else None
+        self.static_time_range = [start, end]
+
+        if self.time_is_valid:
             start, end = self.static_time_range
             if start is not None and end is not None and start > end:
                 self.warningText.appendPlainText(

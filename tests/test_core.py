@@ -60,6 +60,13 @@ class SpecMonitorCliTests(unittest.TestCase):
 
 
 class MonitorLogicTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt_app = (
+            monitor_module.QApplication.instance()
+            or monitor_module.QApplication(["monitor-tests"])
+        )
+
     def test_file_discovery_is_sorted_filtered_and_honors_count(self):
         monitor = SimpleNamespace(file_dir="unused", number_of_files=2)
         with patch.object(
@@ -171,11 +178,77 @@ class MonitorLogicTests(unittest.TestCase):
         labels = axis.tickStrings([0, 3661], scale=1, spacing=60)
         self.assertEqual(labels[0], "1970-01-01\n00:00")
         self.assertEqual(labels[1], "1970-01-01\n01:01")
+        self.assertEqual(axis.style["hideOverlappingLabels"], 70)
+        self.assertTrue(
+            all("2026-08-05" in level.exampleText for level in axis.zoomLevels.values())
+        )
+
+    def test_narrow_axis_falls_back_to_center_tick(self):
+        axis = monitor_module.MonitorDateAxisItem(utcOffset=0)
+        with patch.object(
+            monitor_module.pg.DateAxisItem,
+            "tickValues",
+            return_value=[],
+        ):
+            levels = axis.tickValues(100, 200, 100)
+        self.assertEqual(levels, [(100, [150])])
 
     def test_monitor_reserves_space_for_two_line_tick_labels(self):
         source = inspect.getsource(monitor_module.MainWindow.getLine)
         self.assertIn("tickTextHeight=36", source)
         self.assertIn("setHeight(52)", source)
+
+    def test_data_selection_uses_start_plus_duration_in_days(self):
+        start = 1_700_000_000
+        monitor = SimpleNamespace(
+            startTime=SimpleNamespace(text=lambda: "202311142213"),
+            durationValue=SimpleNamespace(value=lambda: 2.0),
+            durationUnit=SimpleNamespace(currentText=lambda: "Days"),
+            warningText=Mock(),
+            returnSeconds=lambda value: start,
+            _history_loading=True,
+        )
+
+        self.assertFalse(
+            monitor_module.MainWindow.getSelectedDataRangeByDate(monitor)
+        )
+        self.assertEqual(
+            monitor.static_time_range,
+            [start, start + 2 * 24 * 60 * 60],
+        )
+
+    def test_duration_requires_start_unless_all_is_selected(self):
+        monitor = SimpleNamespace(
+            startTime=SimpleNamespace(text=lambda: "yyyymmddHHMM"),
+            durationValue=SimpleNamespace(value=lambda: 1.0),
+            durationUnit=SimpleNamespace(currentText=lambda: "Hours"),
+            warningText=Mock(),
+            returnSeconds=lambda value: None,
+        )
+
+        self.assertFalse(
+            monitor_module.MainWindow.getSelectedDataRangeByDate(monitor)
+        )
+        monitor.warningText.appendPlainText.assert_called_once()
+
+    def test_reset_clears_data_selection_controls(self):
+        monitor = SimpleNamespace(
+            plot_type=False,
+            selected_data_by_file=True,
+            selected_data_by_date=True,
+            static_update_request=True,
+            startTime=Mock(),
+            durationValue=Mock(),
+            durationUnit=Mock(),
+            statusbar=Mock(),
+        )
+
+        monitor_module.MainWindow.setLive(monitor)
+
+        monitor.startTime.clear.assert_called_once_with()
+        monitor.durationValue.setValue.assert_called_once_with(0)
+        monitor.durationUnit.setCurrentIndex.assert_called_once_with(0)
+        self.assertTrue(monitor.plot_type)
 
 
 class DeviceProtocolTests(unittest.TestCase):
