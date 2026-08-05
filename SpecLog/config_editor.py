@@ -357,7 +357,11 @@ class ConfigEditor(QMainWindow):
             self.start_logger_button.setEnabled(False)
             self.stop_logger_button.setEnabled(False)
             return
-        if self.startup_state in {"Enabled", "Disabled"}:
+        # "Unknown" means that the task was found but its XML did not expose a
+        # startup setting we understand.  Its runtime state is still available
+        # from Task Scheduler and is more authoritative than the process-local
+        # mutex check (the task normally runs as SYSTEM).
+        if self.startup_state in {"Enabled", "Disabled", "Unknown"}:
             if (
                 self.task_state_process.state()
                 != QProcess.ProcessState.NotRunning
@@ -565,11 +569,19 @@ class ConfigEditor(QMainWindow):
             if declaration_end >= 0:
                 text = text[declaration_end + 2 :]
             root = ElementTree.fromstring(text.lstrip("\ufeff\r\n "))
-        enabled_text = next(
-            element.text
-            for element in root.iter()
-            if element.tag.rsplit("}", 1)[-1] == "Enabled"
+        enabled_element = next(
+            (
+                element
+                for element in root.iter()
+                if element.tag.rsplit("}", 1)[-1] == "Enabled"
+            ),
+            None,
         )
+        # Enabled is optional in the Task Scheduler schema and defaults to
+        # true when omitted.
+        if enabled_element is None:
+            return True
+        enabled_text = enabled_element.text
         normalized = (enabled_text or "").strip().lower()
         if normalized not in {"true", "false"}:
             raise ValueError(f"Unexpected Enabled value: {enabled_text!r}")

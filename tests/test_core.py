@@ -141,6 +141,21 @@ class ConfigEditorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ConfigEditor._validate_structure(editor)
 
+    def test_task_without_enabled_element_defaults_to_enabled(self):
+        task_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+          <Settings><StartWhenAvailable>true</StartWhenAvailable></Settings>
+        </Task>"""
+
+        self.assertTrue(ConfigEditor._parse_task_enabled(task_xml))
+
+    def test_task_enabled_element_is_namespace_agnostic(self):
+        task_xml = b"""<Task xmlns="urn:test">
+          <Settings><Enabled>false</Enabled></Settings>
+        </Task>"""
+
+        self.assertFalse(ConfigEditor._parse_task_enabled(task_xml))
+
 
 class MonitorLogicTests(unittest.TestCase):
     @classmethod
