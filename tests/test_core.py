@@ -13,7 +13,10 @@ from SpecLog.debugLog import debugLog
 from SpecLog.device import DEVICE, DeviceProtocol
 from SpecLog.history import HistoryCache
 from SpecLog.config_editor import ConfigEditor
-from SpecLog.SpecLogger import _build_parser as build_logger_parser
+from SpecLog.SpecLogger import (
+    _build_parser as build_logger_parser,
+    configure_startup,
+)
 from SpecLog.loggerConfig import loggerConfig
 
 debug_log_module = importlib.import_module("SpecLog.debugLog")
@@ -67,6 +70,29 @@ class SpecLoggerCliTests(unittest.TestCase):
         args = build_logger_parser().parse_args(["--config"])
         self.assertTrue(args.config)
         self.assertIsNone(args.status)
+
+    def test_startup_true_creates_system_start_task(self):
+        runner = Mock(return_value=SimpleNamespace(returncode=0, stdout="", stderr=""))
+        with patch("SpecLog.SpecLogger.os.path.isfile", return_value=True):
+            message = configure_startup(True, "C:/SpecLog/runner.exe", runner)
+
+        command = runner.call_args.args[0]
+        self.assertEqual(command[0], "schtasks")
+        self.assertIn("/Create", command)
+        self.assertIn("ONSTART", command)
+        self.assertIn("SYSTEM", command)
+        self.assertIn("0000:30", command)
+        self.assertIn("without login", message)
+
+    def test_startup_false_disables_existing_task(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        runner = Mock(side_effect=[result, result])
+
+        message = configure_startup(False, runner=runner)
+
+        self.assertIn("/Query", runner.call_args_list[0].args[0])
+        self.assertIn("/DISABLE", runner.call_args_list[1].args[0])
+        self.assertIn("disabled", message)
 
 
 class ConfigEditorTests(unittest.TestCase):

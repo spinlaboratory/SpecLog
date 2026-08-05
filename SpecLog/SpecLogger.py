@@ -10,11 +10,8 @@ import subprocess
 from collections import Counter
 from .SpecLog import *
 
-# auto start and adding icon to desktop (public)
-startup_folder = os.path.join(
-    os.environ["APPDATA"],
-    r"Microsoft\Windows\Start Menu\Programs\Startup"
-)
+# System-start task and desktop shortcuts (public)
+STARTUP_TASK_NAME = "SpecLogger"
 desktop_folder = os.path.join(os.environ["USERPROFILE"], "Desktop")
 
 source_running_logger = os.path.join(
@@ -24,6 +21,62 @@ source_running_logger = os.path.join(
 source_monitor = os.path.join(
     os.path.dirname(sys.executable), "scripts", "SpecMonitor_running.exe"
 )
+
+
+def _run_task_scheduler(arguments, runner=None):
+    runner = runner or subprocess.run
+    return runner(
+        ["schtasks", *arguments],
+        capture_output=True,
+        text=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def configure_startup(enabled, executable=None, runner=None):
+    """Create/enable or disable the no-login SpecLogger startup task."""
+    executable = os.path.abspath(executable or source_running_logger)
+    if enabled:
+        if not os.path.isfile(executable):
+            raise RuntimeError(f"SpecLogger runner was not found: {executable}")
+        result = _run_task_scheduler(
+            [
+                "/Create",
+                "/TN",
+                STARTUP_TASK_NAME,
+                "/TR",
+                f'"{executable}"',
+                "/SC",
+                "ONSTART",
+                "/DELAY",
+                "0000:30",
+                "/RU",
+                "SYSTEM",
+                "/RL",
+                "HIGHEST",
+                "/F",
+            ],
+            runner,
+        )
+        success_message = "SpecLogger will run at system startup without login."
+    else:
+        query = _run_task_scheduler(
+            ["/Query", "/TN", STARTUP_TASK_NAME], runner
+        )
+        if query.returncode:
+            return "SpecLogger startup task is not installed."
+        result = _run_task_scheduler(
+            ["/Change", "/TN", STARTUP_TASK_NAME, "/DISABLE"], runner
+        )
+        success_message = "SpecLogger startup task is disabled."
+
+    if result.returncode:
+        details = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            details
+            or "Windows Task Scheduler rejected the request. Run as administrator."
+        )
+    return success_message
 
 def _build_parser():
     parser = argparse.ArgumentParser(prog="SpecLogger")
@@ -72,18 +125,12 @@ def main_func(argv=None):
 
         return open_config_editor()
 
-    if args.startup == "True":
-        target = os.path.join(startup_folder, "SpecLogger_running.exe")
-        if not os.path.exists(target):
-            shutil.copy(source_running_logger, target)
-            print("SpecLogger will run on startup.")
-    elif args.startup == "False":
-        if not os.path.exists(startup_folder + "/SpecLogger_running.exe"):
-            print(startup_folder + "SpecLogger_running.exe")
-            print("SpecLogger does not run on startup.")
-        else:
-            os.remove(startup_folder + "/SpecLogger_running.exe")
-            print("SpecLogger will not run on startup.")
+    if args.startup is not None:
+        try:
+            print(configure_startup(args.startup == "True"))
+        except RuntimeError as error:
+            print(f"Could not configure SpecLogger startup: {error}", file=sys.stderr)
+            return 1
 
     if args.desktop == "True":
         target_logger = os.path.join(desktop_folder, "SpecLogger_running.exe")
