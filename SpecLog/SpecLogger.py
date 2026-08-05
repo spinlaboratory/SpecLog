@@ -7,14 +7,17 @@ import sys
 import argparse
 import shutil
 import subprocess
-from collections import Counter
 from .SpecLog import *
+from .logger_status import is_logger_running
+from .startup_task import (
+    TASK_SCHEDULER,
+    control_arguments,
+    create_arguments,
+    disable_arguments,
+    query_arguments,
+)
 
 # System-start task and desktop shortcuts (public)
-STARTUP_TASK_NAME = "SpecLogger"
-TASK_SCHEDULER = os.path.join(
-    os.environ.get("SystemRoot", r"C:\Windows"), "System32", "schtasks.exe"
-)
 desktop_folder = os.path.join(os.environ["USERPROFILE"], "Desktop")
 
 source_running_logger = os.path.join(
@@ -43,33 +46,18 @@ def configure_startup(enabled, executable=None, runner=None):
         if not os.path.isfile(executable):
             raise RuntimeError(f"SpecLogger runner was not found: {executable}")
         result = _run_task_scheduler(
-            [
-                "/Create",
-                "/TN",
-                STARTUP_TASK_NAME,
-                "/TR",
-                f'"{executable}"',
-                "/SC",
-                "ONSTART",
-                "/DELAY",
-                "0000:30",
-                "/RU",
-                "SYSTEM",
-                "/RL",
-                "HIGHEST",
-                "/F",
-            ],
+            create_arguments(executable),
             runner,
         )
         success_message = "SpecLogger will run at system startup without login."
     else:
         query = _run_task_scheduler(
-            ["/Query", "/TN", STARTUP_TASK_NAME], runner
+            query_arguments(), runner
         )
         if query.returncode:
             return "SpecLogger startup task is not installed."
         result = _run_task_scheduler(
-            ["/Change", "/TN", STARTUP_TASK_NAME, "/DISABLE"], runner
+            disable_arguments(), runner
         )
         success_message = "SpecLogger startup task is disabled."
 
@@ -80,6 +68,29 @@ def configure_startup(enabled, executable=None, runner=None):
             or "Windows Task Scheduler rejected the request. Run as administrator."
         )
     return success_message
+
+
+def control_scheduled_logger(action, runner=None):
+    """Start/stop the startup task, or return None when it is not installed."""
+    query = _run_task_scheduler(
+        query_arguments(), runner
+    )
+    if query.returncode:
+        return None
+    result = _run_task_scheduler(
+        control_arguments(action), runner
+    )
+    if result.returncode:
+        details = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            details
+            or "Windows Task Scheduler rejected the request. Run as administrator."
+        )
+    return (
+        "SpecLogger scheduled task start requested."
+        if action == "start"
+        else "SpecLogger scheduled task stopped."
+    )
 
 def _build_parser():
     parser = argparse.ArgumentParser(prog="SpecLogger")
@@ -154,32 +165,28 @@ def main_func(argv=None):
     if not args.startup and not args.desktop and not args.status:  # not arguments
         args.status = "start"
 
-    if args.status == "start":
-        current_exe = (
-            os.popen("wmic process get description")
-            .read()
-            .strip()
-            .replace(" ", "")
-            .split("\n\n")
-        )
-        hashDict = Counter(current_exe)
+    if args.status in {"start", "stop"}:
+        try:
+            task_message = control_scheduled_logger(args.status)
+        except RuntimeError as error:
+            print(f"Could not control SpecLogger scheduled task: {error}", file=sys.stderr)
+            return 1
+        if task_message is not None:
+            print(task_message)
+            return 0
 
-        if (
-            "SpecLogger_running.exe" in hashDict
-            and hashDict["SpecLogger_running.exe"] > 0
-        ):
+    if args.status == "start":
+        if is_logger_running():
             print("SpecLogger has started already.")
             return
-
-        else:
-            if args.debug == "False":
-                subprocess.Popen(
-                    "SpecLogger_running.exe", creationflags=subprocess.CREATE_NO_WINDOW
-                )
-                print("SpecLogger started")
-            elif args.debug == "True":
-                os.startfile("SpecLogger_running.exe")
-                print("SpecLogger debug mode started")
+        if args.debug == "False":
+            subprocess.Popen(
+                "SpecLogger_running.exe", creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            print("SpecLogger started")
+        elif args.debug == "True":
+            os.startfile("SpecLogger_running.exe")
+            print("SpecLogger debug mode started")
 
     elif args.status == "stop":
         os.system("taskkill /im SpecLogger_running.exe /F /t")

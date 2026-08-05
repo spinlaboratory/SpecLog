@@ -2,7 +2,6 @@
 
 import ast
 from configparser import ConfigParser
-import ctypes
 import locale
 import os
 from pathlib import Path
@@ -36,6 +35,14 @@ from PySide6.QtWidgets import (
 
 from .config.config import ensure_public_config
 from .loggerConfig import device_default, loggerConfig
+from .logger_status import is_logger_running
+from .startup_task import (
+    POWERSHELL,
+    TASK_SCHEDULER,
+    control_arguments,
+    query_arguments,
+    state_arguments,
+)
 
 
 class IndicatorEditor(QDialog):
@@ -344,16 +351,7 @@ class ConfigEditor(QMainWindow):
 
     @staticmethod
     def _is_logger_running():
-        if os.name != "nt":
-            return False
-        synchronize = 0x00100000
-        handle = ctypes.windll.kernel32.OpenMutexW(
-            synchronize, False, "Local\\SpecLog.SpecLogger"
-        )
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
+        return is_logger_running()
 
     def _refresh_logger_status(self):
         if os.name != "nt":
@@ -367,22 +365,9 @@ class ConfigEditor(QMainWindow):
                 != QProcess.ProcessState.NotRunning
             ):
                 return
-            powershell = os.path.join(
-                os.environ.get("SystemRoot", r"C:\Windows"),
-                "System32",
-                "WindowsPowerShell",
-                "v1.0",
-                "powershell.exe",
-            )
             self.task_state_process.start(
-                powershell,
-                [
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "$task = Get-ScheduledTask -TaskName 'SpecLogger' "
-                    "-ErrorAction Stop; [Console]::Out.Write([int]$task.State)",
-                ],
+                POWERSHELL,
+                state_arguments(),
             )
             return
         running = self._is_logger_running()
@@ -443,14 +428,8 @@ class ConfigEditor(QMainWindow):
         self.start_logger_button.setEnabled(False)
         self.stop_logger_button.setEnabled(False)
         if self.logger_action_uses_task:
-            task_scheduler = os.path.join(
-                os.environ.get("SystemRoot", r"C:\Windows"),
-                "System32",
-                "schtasks.exe",
-            )
-            task_action = "/Run" if action == "start" else "/End"
             self.logger_process.start(
-                task_scheduler, [task_action, "/TN", "SpecLogger"]
+                TASK_SCHEDULER, control_arguments(action)
             )
         else:
             self.logger_process.start(
@@ -524,12 +503,8 @@ class ConfigEditor(QMainWindow):
         if self.startup_state not in {"Enabled", "Disabled", "Not installed"}:
             self._set_startup_state("Checking...")
         self.startup_query_process.start(
-            os.path.join(
-                os.environ.get("SystemRoot", r"C:\Windows"),
-                "System32",
-                "schtasks.exe",
-            ),
-            ["/Query", "/TN", "SpecLogger", "/XML"],
+            TASK_SCHEDULER,
+            query_arguments(xml=True),
         )
 
     def _startup_query_finished(self, exit_code, exit_status):

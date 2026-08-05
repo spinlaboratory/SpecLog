@@ -16,6 +16,7 @@ from SpecLog.config_editor import ConfigEditor
 from SpecLog.SpecLogger import (
     _build_parser as build_logger_parser,
     configure_startup,
+    control_scheduled_logger,
 )
 from SpecLog.loggerConfig import loggerConfig
 
@@ -93,6 +94,32 @@ class SpecLoggerCliTests(unittest.TestCase):
         self.assertIn("/Query", runner.call_args_list[0].args[0])
         self.assertIn("/DISABLE", runner.call_args_list[1].args[0])
         self.assertIn("disabled", message)
+
+    def test_start_uses_scheduled_task_when_installed(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        runner = Mock(side_effect=[result, result])
+
+        message = control_scheduled_logger("start", runner)
+
+        self.assertIn("/Query", runner.call_args_list[0].args[0])
+        self.assertIn("/Run", runner.call_args_list[1].args[0])
+        self.assertIn("start requested", message)
+
+    def test_stop_uses_scheduled_task_when_installed(self):
+        result = SimpleNamespace(returncode=0, stdout="", stderr="")
+        runner = Mock(side_effect=[result, result])
+
+        message = control_scheduled_logger("stop", runner)
+
+        self.assertIn("/End", runner.call_args_list[1].args[0])
+        self.assertIn("stopped", message)
+
+    def test_process_control_falls_back_when_task_is_missing(self):
+        missing = SimpleNamespace(returncode=1, stdout="", stderr="")
+        runner = Mock(return_value=missing)
+
+        self.assertIsNone(control_scheduled_logger("start", runner))
+        self.assertEqual(runner.call_count, 1)
 
 
 class ConfigEditorTests(unittest.TestCase):

@@ -7,7 +7,6 @@ import traceback
 import ctypes
 import time
 import threading
-from collections import Counter
 from .SpecLog import *
 from .debugLog import *
 
