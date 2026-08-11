@@ -293,7 +293,8 @@ class MonitorLogicTests(unittest.TestCase):
 
     def test_monitor_reserves_space_for_two_line_tick_labels(self):
         source = inspect.getsource(monitor_module.MainWindow.getLine)
-        self.assertIn("tickTextHeight=36", source)
+        self.assertIn('QFont("Arial", 10)', source)
+        self.assertIn("tickTextHeight=42", source)
         self.assertIn("setHeight(52)", source)
 
     def test_data_selection_uses_start_plus_duration_in_days(self):

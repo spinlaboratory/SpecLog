@@ -13,11 +13,12 @@ It use PySide 6, there are some terms you need to know before modifying this scr
 
 Author: Yen-Chun Huang
 
-Company: Bridge 12 Technologies, Inc
+Company: Bruker BioSpin
 """
 
 import os
 import csv
+import math
 from pathlib import Path
 import re
 import threading
@@ -30,15 +31,24 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QVBoxLayout,
     QCheckBox,
+    QPushButton,
     QSizePolicy,
 )
 from PySide6 import QtCore
 import pyqtgraph as pg 
+import pyqtgraph.exporters as pg_exporters
 from .ui.plotting import Ui_MainWindow
+from .ui.time_selection import Ui_TimeSelectionWindow
 from .loggerConfig import *
 from .debugLog import *
 from .logger_status import has_recent_log_activity, is_logger_running
 from .history import HistoryCache
+from .monitor_style import (
+    attach_readable_legend,
+    load_monitor_style,
+    make_curve_pens,
+    update_legend_columns,
+)
 
 red = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:red;\nborder:2px solid white;\n}\n"
 green = "QCheckBox::indicator {\nwidth:10px;\nheight:10px;\nborder-radius:7px;\n}\n\nQCheckBox::indicator:unchecked {\nbackground-color:green;\nborder:2px solid white;\n}\n"
@@ -85,6 +95,522 @@ class MonitorDateAxisItem(pg.DateAxisItem):
         return [(spacing, [(minVal + maxVal) / 2])]
 
 
+class TimeOnlyAxisItem(MonitorDateAxisItem):
+    """Historical-window axis; the date range is displayed in the title."""
+
+    def tickStrings(self, values, scale, spacing):
+        labels = []
+        for value in values:
+            try:
+                date_time = datetime.fromtimestamp(value, timezone.utc)
+                label = date_time.strftime(
+                    "%H:%M:%S" if spacing < 60 else "%H:%M"
+                )
+            except (OverflowError, OSError, ValueError):
+                label = ""
+            labels.append(label)
+        return labels
+
+    def tickValues(self, minVal, maxVal, size):
+        """Use uniform clock intervals instead of calendar-day boundaries."""
+        span = maxVal - minVal
+        if span <= 0:
+            return []
+        target_ticks = max(4, min(10, int(size / 90)))
+        desired = span / target_ticks
+        intervals = [
+            1,
+            2,
+            5,
+            10,
+            15,
+            30,
+            60,
+            2 * 60,
+            5 * 60,
+            10 * 60,
+            15 * 60,
+            30 * 60,
+            60 * 60,
+            2 * 60 * 60,
+            3 * 60 * 60,
+            6 * 60 * 60,
+            12 * 60 * 60,
+            24 * 60 * 60,
+        ]
+        spacing = next(
+            (interval for interval in intervals if interval >= desired),
+            intervals[-1] * math.ceil(desired / intervals[-1]),
+        )
+        first = math.ceil(minVal / spacing) * spacing
+        count = max(0, math.floor((maxVal - first) / spacing) + 1)
+        values = [first + index * spacing for index in range(count)]
+        return [(spacing, values)]
+
+
+def set_historical_plot_title(plot_widget, start_text, end_text):
+    """Set a centered two-line title with enough layout height."""
+    title = (
+        '<table cellspacing="0" cellpadding="0">'
+        '<tr><td align="center" style="font-size:18pt;font-weight:600">'
+        "SpecLog</td></tr>"
+        '<tr><td align="center" style="font-size:14pt">'
+        f"{start_text} - {end_text}</td></tr>"
+        "</table>"
+    )
+    plot_widget.setTitle(title)
+    title_label = plot_widget.plotItem.titleLabel
+    title_label.setAttr("justify", "center")
+    cursor = pg.QtGui.QTextCursor(title_label.item.document())
+    cursor.select(pg.QtGui.QTextCursor.SelectionType.Document)
+    block_format = pg.QtGui.QTextBlockFormat()
+    block_format.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+    cursor.mergeBlockFormat(block_format)
+    title_height = 64
+    title_label.setMaximumHeight(title_height)
+    plot_widget.plotItem.layout.setRowFixedHeight(0, title_height)
+    title_label.resizeEvent(None)
+
+
+class TimeSelectionWindow(QMainWindow, Ui_TimeSelectionWindow):
+    """Non-modal historical plot that leaves the main monitor live."""
+
+    historyLoaded = QtCore.Signal(object)
+    historyFailed = QtCore.Signal(object)
+
+    def __init__(self, monitor):
+        super().__init__(monitor)
+        self.monitor = monitor
+        self._loading = False
+        self._request_id = 0
+        self._last_data = None
+        self.setupUi(self)
+        self.refresh_items()
+        self._setup_plot()
+        self.okButton.clicked.connect(self.load_selection)
+        self.resetButton.clicked.connect(self.reset_selection)
+        self.loadFileButton.clicked.connect(self.load_file)
+        self.saveButton.clicked.connect(self.save_data)
+        self.saveFigureButton.clicked.connect(self.save_figure)
+        self.itemList.itemChanged.connect(self.update_selected_curves)
+        self.historyLoaded.connect(self._history_loaded)
+        self.historyFailed.connect(self._history_failed)
+
+    def refresh_items(self):
+        names = [
+            name
+            for name in self.monitor.all_names
+            if name not in {"Date", "Time", "Seconds"}
+            and name not in self.monitor.ignore_list
+        ]
+        self.set_plot_items(names, self.monitor.shown_list)
+
+    def _setup_plot(self):
+        axis = TimeOnlyAxisItem(orientation="bottom", utcOffset=0)
+        self.graphWidget.setAxisItems({"bottom": axis})
+        self.graphWidget.setBackground("w")
+        self.graphWidget.showGrid(x=True, y=True)
+        self.legend = attach_readable_legend(self.graphWidget)
+        self._history_lines = {}
+        bottom = self.graphWidget.getAxis("bottom")
+        bottom.setStyle(
+            tickFont=pg.QtGui.QFont("Arial", 10),
+            tickTextOffset=6,
+            tickTextHeight=24,
+            autoExpandTextSpace=False,
+        )
+        bottom.setHeight(40)
+        self.graphWidget.getAxis("left").setStyle(
+            tickFont=pg.QtGui.QFont("Arial", 10)
+        )
+
+    def reset_selection(self):
+        self._request_id += 1
+        self._loading = False
+        self.okButton.setEnabled(True)
+        self.saveButton.setEnabled(False)
+        self.saveFigureButton.setEnabled(False)
+        self.startTime.clear()
+        self.durationValue.setValue(0)
+        self.durationUnit.setCurrentIndex(0)
+        self.statusLabel.clear()
+        self.graphWidget.clear()
+        self.graphWidget.setTitle("")
+        self.legend.clear()
+        self._history_lines.clear()
+        self._last_data = None
+
+    def load_selection(self):
+        if self._loading:
+            return
+        start = self.monitor.returnSeconds(self.startTime.text().strip())
+        duration = self.durationValue.value()
+        if start is False:
+            self._show_error("Start Time is not valid.")
+            return
+        if start is None and duration > 0:
+            self._show_error("Start Time is required when Duration is not All.")
+            return
+        selected_items = self.selected_plot_items()
+        if not selected_items:
+            self._show_error("Select at least one item to plot.")
+            return
+        multiplier = 24 * 60 * 60 if self.durationUnit.currentText() == "Days" else 60 * 60
+        end = start + duration * multiplier if start is not None and duration > 0 else None
+        self._loading = True
+        self.okButton.setEnabled(False)
+        self.statusLabel.setStyleSheet("")
+        self.statusLabel.setText("Loading historical data...")
+        max_points = max(1000, self.graphWidget.width() * 2)
+        self._request_id += 1
+        request_id = self._request_id
+        thread = threading.Thread(
+            target=self._load_history,
+            args=(request_id, start, end, max_points),
+            daemon=True,
+        )
+        thread.start()
+
+    def _load_history(self, request_id, start, end, max_points):
+        try:
+            all_files = sorted(Path(self.monitor.file_dir).glob("log_*.csv"))
+            self.monitor.history_cache.prune(all_files)
+            files = []
+            for path in all_files:
+                try:
+                    day = datetime.strptime(path.name, "log_%Y%m%d.csv")
+                except ValueError:
+                    continue
+                day_start = int((day - datetime(1970, 1, 1)).total_seconds())
+                day_end = day_start + 24 * 60 * 60 - 1
+                if start is not None and day_end < start:
+                    continue
+                if end is not None and day_start > end:
+                    continue
+                files.append(path)
+            self.monitor.history_cache.sync(files)
+            rows = self.monitor.history_cache.query(
+                start, end, max_points=max_points
+            )
+            self.historyLoaded.emit(
+                (request_id, self.monitor._history_rows_to_data(rows))
+            )
+        except Exception as error:
+            self.monitor.debugLogger.exception("Historical data loading failed")
+            self.historyFailed.emit((request_id, str(error)))
+
+    def _history_loaded(self, result):
+        request_id, data = result
+        if request_id != self._request_id:
+            return
+        self._loading = False
+        self.okButton.setEnabled(True)
+        if not data["Seconds"]:
+            self._show_error("No logged data was found in the selected range.")
+            return
+        self._last_data = data
+        self.saveButton.setEnabled(True)
+        self.saveFigureButton.setEnabled(True)
+        self.update_selected_curves()
+
+    def update_selected_curves(self):
+        data = self._last_data
+        if not data or not data.get("Seconds"):
+            return
+        start_text = datetime.fromtimestamp(
+            data["Seconds"][0], timezone.utc
+        ).strftime("%Y-%m-%d %H:%M")
+        end_text = datetime.fromtimestamp(
+            data["Seconds"][-1], timezone.utc
+        ).strftime("%Y-%m-%d %H:%M")
+        set_historical_plot_title(
+            self.graphWidget, start_text, end_text
+        )
+        plotted = 0
+        selected_names = self.selected_plot_items()
+        selected_pens = make_curve_pens(
+            selected_names, self.monitor.monitor_style
+        )
+        legend_before = tuple(label.text for _sample, label in self.legend.items)
+        selected_set = set(selected_names)
+        for name in tuple(self._history_lines):
+            if name not in selected_set:
+                line = self._history_lines.pop(name)
+                self.legend.removeItem(line)
+                self.graphWidget.removeItem(line)
+        for name in selected_names:
+            values = data.get(name)
+            if values is None:
+                continue
+            try:
+                numeric_values = _np.asarray(values, dtype=float)
+                if len(numeric_values) != len(data["Seconds"]):
+                    continue
+            except (TypeError, ValueError):
+                continue
+            line = self._history_lines.get(name)
+            if line is None:
+                line = self.graphWidget.plot(name=name)
+                self._history_lines[name] = line
+                self.legend.addItem(line, name)
+            line.setPen(selected_pens[name])
+            line.setData(data["Seconds"], numeric_values)
+            plotted += 1
+        legend_after = tuple(label.text for _sample, label in self.legend.items)
+        update_legend_columns(
+            self.legend,
+            plotted,
+            force=legend_after != legend_before,
+        )
+        # Historical data is a newly selected fixed range. Always fit it after
+        # OK, even if a previous zoom or pan disabled automatic ranging.
+        self.graphWidget.enableAutoRange()
+        self.graphWidget.autoRange()
+        self.statusLabel.setStyleSheet("")
+        if plotted:
+            self.statusLabel.setText(
+                f"Loaded {len(data['Seconds'])} points across {plotted} curves."
+            )
+        else:
+            self.statusLabel.setText("Select at least one item to plot.")
+
+    def save_data(self):
+        data = self._last_data
+        if not data or not data.get("Seconds"):
+            self._show_error("Load a time range before saving data.")
+            return
+        names = [name for name in self.selected_plot_items() if name in data]
+        if not names:
+            self._show_error("Select at least one item to save.")
+            return
+        start_name = datetime.fromtimestamp(
+            data["Seconds"][0], timezone.utc
+        ).strftime("%Y%m%d%H%M")
+        end_name = datetime.fromtimestamp(
+            data["Seconds"][-1], timezone.utc
+        ).strftime("%Y%m%d%H%M")
+        filename, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save selected data",
+            f"log_{start_name}-{end_name}.csv",
+            "CSV files (*.csv)",
+        )
+        if not filename:
+            return
+        if not filename.lower().endswith(".csv"):
+            filename += ".csv"
+        try:
+            with open(filename, "w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(["Date", "Time", *names])
+                for index in range(len(data["Seconds"])):
+                    writer.writerow(
+                        [
+                            data["Date"][index],
+                            data["Time"][index],
+                            *(data[name][index] for name in names),
+                        ]
+                    )
+        except (OSError, IndexError) as error:
+            self._show_error(f"Could not save data: {error}")
+            return
+        self.statusLabel.setStyleSheet("")
+        self.statusLabel.setText(f"Saved data: {Path(filename).name}")
+        self.statusLabel.setToolTip(str(Path(filename)))
+
+    def save_figure(self):
+        if not self._last_data or not self.graphWidget.listDataItems():
+            self._show_error("Plot at least one item before saving the figure.")
+            return
+        start_name = datetime.fromtimestamp(
+            self._last_data["Seconds"][0], timezone.utc
+        ).strftime("%Y%m%d%H%M")
+        end_name = datetime.fromtimestamp(
+            self._last_data["Seconds"][-1], timezone.utc
+        ).strftime("%Y%m%d%H%M")
+        filename, _selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Save historical figure",
+            f"log_{start_name}-{end_name}.png",
+            "PNG images (*.png)",
+        )
+        if not filename:
+            return
+        if not filename.lower().endswith(".png"):
+            filename += ".png"
+        export_graph = None
+        try:
+            # Render an independent plot. Exporting or grabbing the live
+            # QGraphicsScene can resolve new minimum sizes and resize its
+            # parent window, even if no item properties are changed directly.
+            export_axis = TimeOnlyAxisItem(orientation="bottom", utcOffset=0)
+            export_graph = pg.PlotWidget(axisItems={"bottom": export_axis})
+            export_graph.resize(self.graphWidget.size())
+            export_graph.setBackground("w")
+            export_graph.showGrid(x=True, y=True)
+            export_legend = attach_readable_legend(export_graph)
+            export_graph.getAxis("bottom").setStyle(
+                tickFont=pg.QtGui.QFont("Arial", 10),
+                tickTextOffset=6,
+                tickTextHeight=24,
+                autoExpandTextSpace=False,
+            )
+            export_graph.getAxis("bottom").setHeight(40)
+            export_graph.getAxis("left").setStyle(
+                tickFont=pg.QtGui.QFont("Arial", 10)
+            )
+            export_start_text = datetime.fromtimestamp(
+                self._last_data["Seconds"][0], timezone.utc
+            ).strftime("%Y-%m-%d %H:%M")
+            export_end_text = datetime.fromtimestamp(
+                self._last_data["Seconds"][-1], timezone.utc
+            ).strftime("%Y-%m-%d %H:%M")
+            set_historical_plot_title(
+                export_graph, export_start_text, export_end_text
+            )
+
+            selected_names = self.selected_plot_items()
+            selected_pens = make_curve_pens(
+                selected_names, self.monitor.monitor_style
+            )
+            plotted = 0
+            for name in selected_names:
+                try:
+                    values = _np.asarray(self._last_data[name], dtype=float)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                line = export_graph.plot(
+                    self._last_data["Seconds"],
+                    values,
+                    pen=selected_pens[name],
+                )
+                export_legend.addItem(line, name)
+                plotted += 1
+            update_legend_columns(export_legend, plotted, force=True)
+            export_graph.autoRange()
+            export_graph.plotItem.layout.activate()
+
+            exporter = pg_exporters.ImageExporter(export_graph.plotItem)
+            exporter.parameters()["width"] = max(
+                1200, max(1, self.graphWidget.width()) * 2
+            )
+            ignore_transforms = (
+                export_legend.GraphicsItemFlag.ItemIgnoresTransformations
+            )
+            export_legend.setFlag(ignore_transforms, False)
+            image = exporter.export(toBytes=True)
+            padding = max(20, round(image.width() * 0.015))
+            padded_image = pg.QtGui.QImage(
+                image.width() + 2 * padding,
+                image.height() + 2 * padding,
+                image.format(),
+            )
+            padded_image.fill(pg.QtGui.QColor("white"))
+            painter = pg.QtGui.QPainter(padded_image)
+            painter.drawImage(padding, padding, image)
+            painter.end()
+            if not padded_image.save(filename):
+                raise OSError("The image encoder could not save the figure.")
+        except Exception as error:
+            self._show_error(f"Could not save figure: {error}")
+            return
+        finally:
+            if export_graph is not None:
+                export_graph.close()
+                export_graph.deleteLater()
+        self.statusLabel.setStyleSheet("")
+        self.statusLabel.setText(f"Saved figure: {Path(filename).name}")
+        self.statusLabel.setToolTip(str(Path(filename)))
+
+    def load_file(self):
+        filename, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            "Load SpecLog data",
+            self.monitor.file_dir,
+            "CSV files (*.csv)",
+        )
+        if not filename:
+            return
+        try:
+            with open(filename, "r", newline="", encoding="utf-8-sig") as stream:
+                reader = csv.reader(stream)
+                headers = next(reader, None)
+                if not headers:
+                    raise ValueError("The selected file is empty.")
+                headers = self.monitor.convertNames(
+                    [header.strip() for header in headers]
+                )
+                data = {name: [] for name in headers}
+                data.setdefault("Date", [])
+                data.setdefault("Time", [])
+                data["Seconds"] = []
+                for row in reader:
+                    values = {
+                        name: value.strip()
+                        for name, value in zip(headers, row)
+                    }
+                    date_text = values.get("Date")
+                    time_text = values.get("Time")
+                    if not date_text or not time_text:
+                        continue
+                    try:
+                        seconds = self.monitor.getXAxisFromTime(
+                            date_text, time_text
+                        )
+                    except ValueError:
+                        continue
+                    data["Date"].append(date_text)
+                    data["Time"].append(time_text)
+                    data["Seconds"].append(seconds)
+                    for name in headers:
+                        if name in {"Date", "Time", "Seconds"}:
+                            continue
+                        value = values.get(name, "nan")
+                        try:
+                            data[name].append(float(value))
+                        except (TypeError, ValueError):
+                            data[name].append(_np.nan)
+        except (OSError, ValueError) as error:
+            self._show_error(f"Could not load data: {error}")
+            return
+        if not data["Seconds"]:
+            self._show_error("The selected file contains no valid data.")
+            return
+
+        available = [
+            name
+            for name in data
+            if name not in {"Date", "Time", "Seconds"}
+        ]
+        current = self.selected_plot_items()
+        selected = [name for name in current if name in available]
+        if not selected:
+            selected = available
+        self.set_plot_items(available, selected)
+        self._request_id += 1
+        self._loading = False
+        self.okButton.setEnabled(True)
+        self._last_data = data
+        self.saveButton.setEnabled(True)
+        self.saveFigureButton.setEnabled(True)
+        self.update_selected_curves()
+        self.statusLabel.setText(
+            f"Loaded {len(data['Seconds'])} points from {Path(filename).name}."
+        )
+
+    def _history_failed(self, result):
+        request_id, message = result
+        if request_id != self._request_id:
+            return
+        self._loading = False
+        self.okButton.setEnabled(True)
+        self._show_error(f"Historical data could not be loaded: {message}")
+
+    def _show_error(self, message):
+        self.statusLabel.setStyleSheet("color: red;")
+        self.statusLabel.setText(message)
+
+
 class MainWindow(QMainWindow, Ui_MainWindow):
     historyLoaded = QtCore.Signal(object)
     historyFailed = QtCore.Signal(str)
@@ -100,6 +626,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         )
         self.gridLayout_2.setColumnStretch(1, 1)
         self.gridLayout_2.setColumnStretch(2, 1)
+        self.groupBox.hide()
+        self.selectTimeButton = QPushButton("Select Time", self.centralwidget)
+        self.gridLayout_2.addWidget(self.selectTimeButton, 3, 0, 1, 1)
+        self.time_selection_window = None
 
         # configuration file
         config = loggerConfig(config_file)
@@ -109,6 +639,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.device_config = config.devices
         self.file_dir = self.settings["log_folder_location"] + "/LOG/"
         self.commands = config.commands
+        self.monitor_style = load_monitor_style()
         self.number_of_files = max(1, number_of_files)
         os.makedirs(self.file_dir, exist_ok=True)
         self.current_file = None
@@ -456,17 +987,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.graphWidget.setBackground("w")
         self.graphWidget.showGrid(x=True, y=True)
-        self.legend = self.graphWidget.addLegend()
+        self.legend = attach_readable_legend(self.graphWidget)
         self.ax = self.graphWidget.getAxis("bottom")
         self.ax.setStyle(
-            tickFont=pg.QtGui.QFont("Arial", 7),
-            tickTextOffset=4,
-            tickTextHeight=36,
+            tickFont=pg.QtGui.QFont("Arial", 10),
+            tickTextOffset=6,
+            tickTextHeight=42,
             autoExpandTextSpace=False,
         )
         # Date/time ticks use two lines, while DateAxisItem normally reserves
         # space based on its original single-line examples.
         self.ax.setHeight(52)
+        self.graphWidget.getAxis("left").setStyle(
+            tickFont=pg.QtGui.QFont("Arial", 10)
+        )
     
         return True
 
@@ -481,18 +1015,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         """
         self.pen_by_name = {}  # {name: pen}
-
-        color_list_loop = ["#F37021", "#46812B", "#67AE3E", "#4D4D4F"]  # can be extend
-        dash_list_loop = [None, None, None, None]  # can be extend
-
-        for index, name in enumerate(self.all_names):
-            color = color_list_loop[index % len(color_list_loop)]  # loop color list
-            dash = dash_list_loop[
-                index // len(color_list_loop) % len(dash_list_loop)
-            ]  # loop dash line list if same color
-            self.pen_by_name[name] = pg.mkPen(
-                color=color, dash=dash, width=2.5
-            )  # set to pen by name
+        self.pen_by_name.update(
+            make_curve_pens(self.all_names, self.monitor_style)
+        )
 
         return True
 
@@ -504,15 +1029,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         By default, the plot is live
         """
         self.plot_type = True  # plot is live
-        self.setToStatic.clicked.connect(
-            self.setStatic
-        )  # ok button to set static by date
-        self.setToLive.clicked.connect(
-            self.setLive
-        )  # reset button to set plot back to live
-        self.loadFile.triggered.connect(
-            self.loadStaticFile
-        )  # menu bar for file selection
+        self.selectTimeButton.clicked.connect(self.openTimeSelection)
+        # Historical files are loaded from the Select Time window so the main
+        # graph always remains a live plot.
+        self.menuFile.menuAction().setVisible(False)
+
+    def openTimeSelection(self):
+        if self.time_selection_window is None:
+            self.time_selection_window = TimeSelectionWindow(self)
+        else:
+            self.time_selection_window.refresh_items()
+        self.time_selection_window.show()
+        self.time_selection_window.raise_()
+        self.time_selection_window.activateWindow()
 
     def setStatic(self):
         """
@@ -751,8 +1280,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         Plotting data
         """
+        selected_pens = make_curve_pens(self.shown_list, self.monitor_style)
+        legend_before = tuple(label.text for _sample, label in self.legend.items)
         for name in self.all_names:
             if name in self.shown_list:  # plot line in shown widget
+                self.line_by_name[name].setPen(selected_pens[name])
                 if not self.legend.getLabel(
                     self.line_by_name[name]
                 ):  # if not legend, add legend
@@ -762,6 +1294,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             else:  # hide line in hidden widget
                 self.legend.removeItem(name)  # remove legend
                 self.line_by_name[name].setData([], [])  # display empty line
+        legend_after = tuple(label.text for _sample, label in self.legend.items)
+        update_legend_columns(
+            self.legend,
+            len(legend_after),
+            force=legend_after != legend_before,
+        )
 
     ### ======================================================= List Widget Interaction =======================================================
     def saveDisplaySettings(self):
