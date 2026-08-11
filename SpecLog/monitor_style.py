@@ -100,8 +100,14 @@ def update_legend_columns(legend, curve_count, force=False):
     # entries out by rows, so ceil(count / 4) guarantees at most four rows.
     columns = max(1, math.ceil(curve_count / 4))
     if force and legend.columnCount == columns and legend.items:
-        # LegendItem.removeItem leaves empty grid cells when the number of
-        # columns is unchanged. Toggle once to rebuild a compact layout.
-        legend.setColumnCount(columns + 1)
+        # LegendItem.removeItem leaves empty grid cells when the column count
+        # is unchanged. Rebuild in place without briefly switching to a
+        # different column count, which can produce a visible legend flash.
+        legend.rowCount = math.ceil(len(legend.items) / columns)
+        for index in range(legend.layout.count() - 1, -1, -1):
+            legend.layout.removeAt(index)
+        for sample, label in legend.items:
+            legend._addItemToLayout(sample, label)
+        legend.updateSize()
     if legend.columnCount != columns:
         legend.setColumnCount(columns)

@@ -132,7 +132,7 @@ SpecMonitor
 ```
 
 Use the monitoring-item controls to select which measurements are plotted. Use
-**Select Time** to open a separate historical-data window. Enter a start time
+**Historical Data** to open a separate historical-data window. Enter a start time
 and duration, choose curves from the **Items to plot** checklist, then click
 **OK** to plot the selected range in that window. This checklist is independent
 of the main monitor's live-item selection. After data is loaded, checking or
@@ -145,7 +145,7 @@ The historical plot uses a time-only horizontal axis; its title shows the full
 start and end date/time. Click **Save** to export the loaded Date, Time, and
 currently checked measurement items to a CSV file.
 
-Click **Load** in the Select Time window to open an existing SpecLog CSV
+Click **Load** in the Historical Data window to open an existing SpecLog CSV
 file in the historical plot. File loading is kept out of the main monitor so its
 graph continues showing live data.
 

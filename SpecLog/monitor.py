@@ -29,16 +29,18 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QMainWindow,
+    QGroupBox,
+    QHBoxLayout,
     QVBoxLayout,
     QCheckBox,
     QPushButton,
     QSizePolicy,
 )
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 import pyqtgraph as pg 
 import pyqtgraph.exporters as pg_exporters
 from .ui.plotting import Ui_MainWindow
-from .ui.time_selection import Ui_TimeSelectionWindow
+from .ui.historical_data import Ui_HistoricalDataWindow
 from .loggerConfig import *
 from .debugLog import *
 from .logger_status import has_recent_log_activity, is_logger_running
@@ -172,7 +174,7 @@ def set_historical_plot_title(plot_widget, start_text, end_text):
     title_label.resizeEvent(None)
 
 
-class TimeSelectionWindow(QMainWindow, Ui_TimeSelectionWindow):
+class HistoricalDataWindow(QMainWindow, Ui_HistoricalDataWindow):
     """Non-modal historical plot that leaves the main monitor live."""
 
     historyLoaded = QtCore.Signal(object)
@@ -618,6 +620,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, config_file: str = None, number_of_files: int = 10):
         super().__init__()
         self.setupUi(self)
+        self.groupBox_4.setTitle("Monitor Messages")
+        self.groupBox_6.setTitle("Device Status")
+        self.groupBox_3.setTitle("System Status")
+        self.systemStatus.setText("Overall")
+        self._configure_monitor_items_ui()
         self.groupBox_4.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -627,9 +634,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.gridLayout_2.setColumnStretch(1, 1)
         self.gridLayout_2.setColumnStretch(2, 1)
         self.groupBox.hide()
-        self.selectTimeButton = QPushButton("Select Time", self.centralwidget)
-        self.gridLayout_2.addWidget(self.selectTimeButton, 3, 0, 1, 1)
-        self.time_selection_window = None
+        self.groupBox_5.setTitle("Plot Controls")
+        self.groupBox_5.setMinimumHeight(84)
+        self.groupBox_5.setMaximumHeight(84)
+        self.historicalDataButton = QPushButton(
+            "Historical Data", self.groupBox_5
+        )
+        self.gridLayout_4.addWidget(self.historicalDataButton, 1, 0, 1, 2)
+        self.historical_data_window = None
 
         # configuration file
         config = loggerConfig(config_file)
@@ -640,6 +652,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.file_dir = self.settings["log_folder_location"] + "/LOG/"
         self.commands = config.commands
         self.monitor_style = load_monitor_style()
+        self._main_curve_style_slot = {}
+        self._main_curve_pen = {}
         self.number_of_files = max(1, number_of_files)
         os.makedirs(self.file_dir, exist_ok=True)
         self.current_file = None
@@ -672,22 +686,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self.loadDisplaySettings():
             self.saveDisplaySettings()  # initial saving
 
-        self.hiddenListWidget.addItems(self.hidden_list)
-        self.shownListWidget.addItems(
-            self.shown_list
-        )  # self.shown_list is used for displaying data
+        self._populate_monitor_items()
 
         # Status Indicator
         self.setLEDIndicator()
         self.setStatus()
 
         # Buttons and Menu settings
-        self.hiddenToShown.clicked.connect(
-            self.showItems
-        )  # button to move item from hidden widget to shown widget
-        self.shownToHidden.clicked.connect(
-            self.hideItems
-        )  # button to move item from shown widget to hidden widget
+        self.shownListWidget.itemChanged.connect(self._monitor_item_changed)
         self.clearWarningText.clicked.connect(
             self.clearWarning
         )  # button to clear warning message
@@ -701,6 +707,71 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.timer.timeout.connect(self.printWarning)
         self.timer.timeout.connect(self.plot)
         self.timer.start()
+
+    def _configure_monitor_items_ui(self):
+        """Replace the legacy shown/hidden lists with one checkbox list."""
+        for widget in (
+            self.hiddenListWidget,
+            self.Shown,
+            self.Hidden,
+            self.hiddenToShown,
+            self.shownToHidden,
+        ):
+            self.gridLayout.removeWidget(widget)
+            widget.hide()
+        self.gridLayout.removeWidget(self.shownListWidget)
+        self.shownListWidget.setMinimumSize(0, 0)
+        self.shownListWidget.setMaximumSize(16777215, 16777215)
+        self.shownListWidget.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.NoSelection
+        )
+        self.gridLayout.addWidget(self.shownListWidget, 0, 0, 5, 3)
+        self.groupBox_2.setTitle("Monitor Items")
+
+    def _populate_monitor_items(self):
+        """Populate main-plot choices using the Data Selection checkbox style."""
+        self.shownListWidget.blockSignals(True)
+        self.shownListWidget.clear()
+        shown = set(self.shown_list)
+        for name in self.all_names:
+            if name in self.ignore_list:
+                continue
+            item = QtWidgets.QListWidgetItem(name)
+            item.setFlags(
+                item.flags()
+                | QtCore.Qt.ItemFlag.ItemIsUserCheckable
+                | QtCore.Qt.ItemFlag.ItemIsEnabled
+            )
+            item.setCheckState(
+                QtCore.Qt.CheckState.Checked
+                if name in shown
+                else QtCore.Qt.CheckState.Unchecked
+            )
+            item.setForeground(pg.mkColor("black"))
+            self.shownListWidget.addItem(item)
+        self.shownListWidget.blockSignals(False)
+
+    def _monitor_item_changed(self, _item):
+        shown = []
+        hidden = []
+        for index in range(self.shownListWidget.count()):
+            item = self.shownListWidget.item(index)
+            if item.checkState() == QtCore.Qt.CheckState.Checked:
+                shown.append(item.text())
+            else:
+                hidden.append(item.text())
+        self.shown_list = shown
+        self.hidden_list = hidden
+        self.saveDisplaySettings()
+        # Apply curves and legend as one visual update. Otherwise the timer can
+        # paint the temporary layout left by removing a legend entry.
+        self.graphWidget.setUpdatesEnabled(False)
+        try:
+            self.plot()
+            self.graphWidget.plotItem.layout.activate()
+        finally:
+            self.graphWidget.setUpdatesEnabled(True)
+            self.graphWidget.viewport().update()
 
     ### ======================================================= Log Data Files  =======================================================
     def getFiles(self):
@@ -747,7 +818,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.ignore_list.append(name)
                 else:
                     self.hidden_list.append(name)
-                    self.hiddenListWidget.addItem(name)
+                    self._populate_monitor_items()
         return True
 
     ### ======================================================= Data Dictionary =======================================================
@@ -1029,19 +1100,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         By default, the plot is live
         """
         self.plot_type = True  # plot is live
-        self.selectTimeButton.clicked.connect(self.openTimeSelection)
-        # Historical files are loaded from the Select Time window so the main
+        self.historicalDataButton.clicked.connect(self.openHistoricalData)
+        # Historical files are loaded from the Historical Data window so the main
         # graph always remains a live plot.
         self.menuFile.menuAction().setVisible(False)
 
-    def openTimeSelection(self):
-        if self.time_selection_window is None:
-            self.time_selection_window = TimeSelectionWindow(self)
+    def openHistoricalData(self):
+        if self.historical_data_window is None:
+            self.historical_data_window = HistoricalDataWindow(self)
         else:
-            self.time_selection_window.refresh_items()
-        self.time_selection_window.show()
-        self.time_selection_window.raise_()
-        self.time_selection_window.activateWindow()
+            self.historical_data_window.refresh_items()
+        self.historical_data_window.show()
+        self.historical_data_window.raise_()
+        self.historical_data_window.activateWindow()
 
     def setStatic(self):
         """
@@ -1280,7 +1351,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """
         Plotting data
         """
-        selected_pens = make_curve_pens(self.shown_list, self.monitor_style)
+        selected_pens = self._persistent_main_curve_pens()
         legend_before = tuple(label.text for _sample, label in self.legend.items)
         for name in self.all_names:
             if name in self.shown_list:  # plot line in shown widget
@@ -1300,6 +1371,28 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             len(legend_after),
             force=legend_after != legend_before,
         )
+
+    def _persistent_main_curve_pens(self):
+        """Keep each curve's style stable until that curve is unselected."""
+        selected = set(self.shown_list)
+        for name in tuple(self._main_curve_style_slot):
+            if name not in selected:
+                self._main_curve_style_slot.pop(name, None)
+                self._main_curve_pen.pop(name, None)
+
+        used_slots = set(self._main_curve_style_slot.values())
+        for name in self.shown_list:
+            if name in self._main_curve_style_slot:
+                continue
+            slot = 0
+            while slot in used_slots:
+                slot += 1
+            slot_names = list(range(slot + 1))
+            pen = make_curve_pens(slot_names, self.monitor_style)[slot]
+            self._main_curve_style_slot[name] = slot
+            self._main_curve_pen[name] = pen
+            used_slots.add(slot)
+        return self._main_curve_pen
 
     ### ======================================================= List Widget Interaction =======================================================
     def saveDisplaySettings(self):
@@ -1461,27 +1554,67 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         Set indicators based on the number of devices and status of devices
         """
         self.status_names = {} # the list to store what need to be shown as status
-        layout = QVBoxLayout()
         self.indicator_dictionary = {}
         self.status = {False: red, True: green}
-        for device in ["Logger"] + list(self.device_config):
-            led = QCheckBox(device)
+        self.logger_status = {
+            state: (
+                "QCheckBox { font-size: 20pt; }"
+                "QCheckBox::indicator {"
+                "width:40px; height:40px; border-radius:22px; }"
+                "QCheckBox::indicator:unchecked {"
+                f"background-color:{'green' if state else 'red'};"
+                "border:2px solid white; }"
+            )
+            for state in (False, True)
+        }
+
+        logger_led = QCheckBox("Logger", self.groupBox_3)
+        logger_led.setCheckable(False)
+        logger_led.setStyleSheet(self.logger_status[False])
+        self.systemStatusLayout.addWidget(logger_led)
+        self.indicator_dictionary["Logger"] = logger_led
+
+        status_layout = QVBoxLayout()
+        connections_group = QGroupBox("Connections", self.groupBox_6)
+        connections_layout = QVBoxLayout(connections_group)
+        readings_group = QGroupBox("Readings", self.groupBox_6)
+        readings_layout = QVBoxLayout(readings_group)
+        has_readings = False
+
+        for device in self.device_config:
+            led = QCheckBox(device, connections_group)
             led.setCheckable(False)
             led.setStyleSheet(self.status[False])
-            layout.addWidget(led)
+            connections_layout.addWidget(led)
             self.indicator_dictionary[device] = led
             self.status_names[device] = []
-            if device != "Logger":
-                for name, info in self.commands[device].items():
-                    if info['indicators']:
-                        self.status_names[device].append(name)
-                        for indicator in info['indicators']:
-                            led = QCheckBox(indicator)
-                            led.setCheckable(False)
-                            led.setStyleSheet(self.status[False])
-                            layout.addWidget(led)
-                            self.indicator_dictionary[indicator] = led
-        self.groupBox_6.setLayout(layout)
+            device_readings_group = QGroupBox(device, readings_group)
+            device_readings_layout = QVBoxLayout(device_readings_group)
+            device_has_readings = False
+            for name, info in self.commands[device].items():
+                if info['indicators']:
+                    self.status_names[device].append(name)
+                    for indicator in info['indicators']:
+                        has_readings = True
+                        device_has_readings = True
+                        led = QCheckBox(indicator, device_readings_group)
+                        led.setCheckable(False)
+                        led.setStyleSheet(self.status[False])
+                        device_readings_layout.addWidget(led)
+                        self.indicator_dictionary[indicator] = led
+            if device_has_readings:
+                readings_layout.addWidget(device_readings_group)
+            else:
+                device_readings_group.deleteLater()
+
+        if not has_readings:
+            readings_layout.addWidget(
+                QtWidgets.QLabel("No bit readings configured")
+            )
+        status_layout.addWidget(connections_group)
+        status_layout.addWidget(readings_group)
+        status_layout.addStretch()
+        self.groupBox_6.setLayout(status_layout)
         
     def setStatus(self):
         """
@@ -1495,11 +1628,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._last_process_check = now
 
         logger_status_change = self._logger_running != (
-            self.indicator_dictionary["Logger"].styleSheet() == self.status[True]
+            self.indicator_dictionary["Logger"].styleSheet()
+            == self.logger_status[True]
         )
         if logger_status_change:
             self.indicator_dictionary["Logger"].setStyleSheet(
-                self.status[self._logger_running]
+                self.logger_status[self._logger_running]
             )
 
         for device in self.device_config:

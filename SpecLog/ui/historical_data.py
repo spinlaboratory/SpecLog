@@ -20,9 +20,9 @@ from PySide6.QtWidgets import (
 from pyqtgraph import PlotWidget
 
 
-class Ui_TimeSelectionWindow:
+class Ui_HistoricalDataWindow:
     def setupUi(self, window):
-        window.setWindowTitle("Select Time")
+        window.setWindowTitle("Historical Data")
         window.resize(950, 650)
         central = QWidget(window)
         layout = QVBoxLayout(central)
