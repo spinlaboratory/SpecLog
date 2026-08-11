@@ -45,6 +45,7 @@ class ConfigEditor(QMainWindow):
         self.logger_log_offset = 0
         self.startup_state = "Checking..."
         self.scheduled_task_running = False
+        self._closing = False
         self.setWindowTitle("SpecLog Configuration")
         self.resize(900, 600)
         self._build_ui()
@@ -95,6 +96,36 @@ class ConfigEditor(QMainWindow):
         self.startup_timer.start()
         self._refresh_startup_status()
 
+    def closeEvent(self, event):
+        """Stop status probes before Qt destroys the editor's widgets."""
+        self._closing = True
+        for timer_name in ("logger_timer", "startup_timer"):
+            timer = getattr(self, timer_name, None)
+            if timer is not None:
+                timer.stop()
+
+        # A process can emit errorOccurred while its parent and sibling widgets
+        # are being torn down.  Block those callbacks first, then ensure no
+        # child process is left running when its QProcess wrapper is destroyed.
+        for process_name in (
+            "task_state_process",
+            "startup_query_process",
+            "logger_process",
+            "startup_process",
+        ):
+            process = getattr(self, process_name, None)
+            if process is None:
+                continue
+            process.blockSignals(True)
+            if process.state() == QProcess.ProcessState.NotRunning:
+                continue
+            process.terminate()
+            if not process.waitForFinished(500):
+                process.kill()
+                process.waitForFinished(1000)
+
+        super().closeEvent(event)
+
     def _update_command_buttons(self, tab_index):
         self.add_value_command_button.setVisible(tab_index == 0)
         self.add_status_command_button.setVisible(tab_index == 1)
@@ -115,6 +146,8 @@ class ConfigEditor(QMainWindow):
         return is_logger_running()
 
     def _refresh_logger_status(self):
+        if self._closing:
+            return
         if os.name != "nt":
             self.logger_status_label.setText("Status unavailable")
             self.start_logger_button.setEnabled(False)
@@ -286,6 +319,8 @@ class ConfigEditor(QMainWindow):
             )
 
     def _refresh_startup_status(self):
+        if self._closing:
+            return
         if os.name != "nt":
             self._set_startup_state("Unavailable")
             return
