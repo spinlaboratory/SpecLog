@@ -116,7 +116,11 @@ SpecLogger -startup False
 ```
 
 The configuration editor also provides **Enable** and **Disable** startup
-buttons. Administrator permission is normally required to use them.
+buttons. Administrator permission is normally required to use them. 
+
+After **Enable**, open **Task Scheduler** and find **Speclogger** task, disable
+**Stop the task if it runs longer than** in **settings**.
+
 
 If the startup task was created by another administrator, a standard account
 may show startup as **Unavailable**. If new log data is still being written, the
@@ -132,10 +136,28 @@ SpecMonitor
 ```
 
 Use the monitoring-item controls to select which measurements are plotted. Use
-the data-selection controls to choose a start time and duration.
+**Historical Data** to open a separate historical-data window. Enter a start time
+and duration, choose curves from the **Items to plot** checklist, then click
+**OK** to plot the selected range in that window. This checklist is independent
+of the main monitor's live-item selection. After data is loaded, checking or
+unchecking an item updates the historical plot immediately without loading the
+files again. The main monitor remains open and
+continues displaying live data. Click **Reset** to cancel the current historical
+request and clear the selection fields and plot.
 
-To load all available history, leave the date fields at their defaults and click
-**Ok**. The first import may take longer; later queries load only new or changed
+The historical plot uses a time-only horizontal axis; its title shows the full
+start and end date/time. Click **Save** to export the loaded Date, Time, and
+currently checked measurement items to a CSV file.
+
+Click **Load** in the Historical Data window to open an existing SpecLog CSV
+file in the historical plot. File loading is kept out of the main monitor so its
+graph continues showing live data.
+
+Click **Save Figure** to export the historical plot, including its title, axes,
+curves, and legend, as a PNG image.
+
+To load all available history, leave Start Time empty, keep Duration at **All**,
+and click **OK**. The first import may take longer; later queries load only new or changed
 files.
 
 Start the monitor with a visible debug console when troubleshooting:
@@ -143,6 +165,19 @@ Start the monitor with a visible debug console when troubleshooting:
 ```text
 SpecMonitor -debug True
 ```
+
+Monitor curves use a high-contrast subset of the packaged Bruker color palette
+that remains visible on a white background. They cycle through solid, dashed,
+dotted, and dash-dot line shapes when additional curve styles are needed. Style
+assignment is recalculated from the currently selected items, so selections that
+fit within the color palette use solid lines only. These
+application styles are stored internally in
+`SpecLog/config/monitor_config.cfg`; they are separate from the public device
+configuration.
+
+Plot legends are displayed below the curves rather than over them. Legend and
+axis text use larger fonts, and long legends automatically use additional
+columns.
 
 ## Common status messages
 
