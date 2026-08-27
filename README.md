@@ -82,15 +82,13 @@ SpecLogger start
 SpecLogger stop
 ```
 
+These commands control the installed **SpecLogger** scheduled task; they do not
+start a separate logger process. Enable the startup task first if it is not yet
+installed.
+
 You can also use **Start** and **Stop** at the bottom of the configuration
 editor. Current status is shown as **Running**, **Stopped**, or **Status
 unavailable**. Operation results and errors appear in the **Messages** area.
-
-For troubleshooting, start the logger with a visible debug console:
-
-```text
-SpecLogger -debug True
-```
 
 ## Start logging automatically without login
 
