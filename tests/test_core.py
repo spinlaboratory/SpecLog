@@ -17,6 +17,7 @@ from SpecLog.SpecLogger import (
     _build_parser as build_logger_parser,
     configure_startup,
     control_scheduled_logger,
+    main_func as logger_main,
 )
 from SpecLog.loggerConfig import loggerConfig
 
@@ -114,12 +115,27 @@ class SpecLoggerCliTests(unittest.TestCase):
         self.assertIn("/End", runner.call_args_list[1].args[0])
         self.assertIn("stopped", message)
 
-    def test_process_control_falls_back_when_task_is_missing(self):
+    def test_process_control_fails_when_task_is_missing(self):
         missing = SimpleNamespace(returncode=1, stdout="", stderr="")
         runner = Mock(return_value=missing)
 
-        self.assertIsNone(control_scheduled_logger("start", runner))
+        with self.assertRaisesRegex(RuntimeError, "scheduled task"):
+            control_scheduled_logger("start", runner)
         self.assertEqual(runner.call_count, 1)
+
+    def test_default_command_only_requests_scheduled_task(self):
+        with (
+            patch(
+                "SpecLog.SpecLogger.control_scheduled_logger",
+                return_value="SpecLogger scheduled task start requested.",
+            ) as control,
+            patch("SpecLog.SpecLogger.subprocess.Popen") as popen,
+        ):
+            result = logger_main([])
+
+        self.assertEqual(result, 0)
+        control.assert_called_once_with("start")
+        popen.assert_not_called()
 
 
 class ConfigEditorTests(unittest.TestCase):
