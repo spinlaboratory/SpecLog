@@ -116,7 +116,11 @@ SpecLogger -startup False
 ```
 
 The configuration editor also provides **Enable** and **Disable** startup
-buttons. Administrator permission is normally required to use them.
+buttons. Administrator permission is normally required to use them. 
+
+After **Enable**, open **Task Scheduler** and find **Speclogger** task, disable
+**Stop the task if it runs longer than** in **settings**.
+
 
 If the startup task was created by another administrator, a standard account
 may show startup as **Unavailable**. If new log data is still being written, the
