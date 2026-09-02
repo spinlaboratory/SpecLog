@@ -3,7 +3,7 @@ This is debug log class for logger
 
 Author: Yen-Chun Huang
 
-Company: Bridge 12 Technologies. Inc
+Company: Bruker BioSpin
 """
 
 import logging
