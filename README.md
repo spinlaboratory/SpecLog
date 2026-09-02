@@ -177,6 +177,14 @@ Plot legends are displayed below the curves rather than over them. Legend and
 axis text use larger fonts, and long legends automatically use additional
 columns.
 
+## License
+
+Copyright © 2026 Bruker. All rights reserved.
+
+SpecLog is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Commercial use requires separate written permission or a commercial license
+from Bruker.
+
 ## Common status messages
 
 - **Running**: The logger is active and directly detectable.

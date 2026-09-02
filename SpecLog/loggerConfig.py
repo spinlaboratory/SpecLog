@@ -9,7 +9,7 @@ Logger will use the three dictionaries.
 
 Author: Yen-Chun Huang
 
-Company: Bridge 12 Technologies. Inc
+Company: Bruker BioSpin
 """
 
 import ast
