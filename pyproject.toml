@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 authors = [
   { name = "Yen-Chun Huang", email = "yen-chun.huang@bruker.com" }
 ]
-license = "PolyForm-Noncommercial-1.0.0"
+license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 classifiers = [
   "Programming Language :: Python :: 3",

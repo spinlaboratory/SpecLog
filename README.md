@@ -181,9 +181,8 @@ columns.
 
 Copyright © 2026 Bruker. All rights reserved.
 
-SpecLog is available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-Commercial use requires separate written permission or a commercial license
-from Bruker.
+SpecLog is free software licensed under the
+[GNU General Public License version 3](LICENSE).
 
 ## Common status messages
 
